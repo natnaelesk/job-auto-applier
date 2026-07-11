@@ -1,0 +1,43 @@
+# Secrets — never commit
+.env
+credentials.json
+token.json
+*.session
+*.session-journal
+
+# Your real profile (keep local; commit only *.example.md templates)
+profile/about_me.md
+profile/answers.md
+profile/master_cv.md
+profile/docs/passport_data.md
+profile/docs/README.md
+
+# Identity / education docs (passport especially)
+profile/docs/raw/
+profile/docs/uploads/
+profile/docs/*.pdf
+profile/docs/*.jpg
+profile/docs/*.jpeg
+profile/docs/*.png
+profile/docs/*.webp
+profile/docs/*.HEIC
+profile/docs/*.heic
+
+# Generated / local runtime
+data/
+output/
+__pycache__/
+*.pyc
+.venv/
+venv/
+browser_profile*/
+*.db
+
+# Unrelated / local clutter
+portfolio/
+bridge_err.txt
+bridge_out.txt
+repos.json
+.DS_Store
+Thumbs.db
+*.lnk

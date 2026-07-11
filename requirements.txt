@@ -1,0 +1,22 @@
+# Phase 1 — Telegram watcher
+telethon
+python-dotenv
+
+# Phase 2+ — AI brain (Cursor SDK)
+cursor-sdk
+
+# Phase 3 — PDF generation
+reportlab
+
+# Phase 4 — Notion tracker
+notion-client
+
+# Phase 5 — application agent
+playwright
+Pillow
+customtkinter
+
+# Phase 6 — Gmail scanner
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
