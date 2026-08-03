@@ -55,9 +55,21 @@ Fill at least:
 ```env
 TELEGRAM_API_ID=...
 TELEGRAM_API_HASH=...
-TELEGRAM_CHANNELS=@your_channel1,@your_channel2
 CURSOR_API_KEY=...
 ```
+
+**Telegram channels** = a list of `@usernames` in `.env` (comma-separated or JSON array).  
+`.env.example` already has sample Ethiopia tech channels — replace with yours:
+
+```env
+# Comma list (easiest):
+TELEGRAM_CHANNELS=@josad_software,@freelance_ethio,@hahujobs,@Maroset,@AbiLink7
+
+# Or JSON array:
+# TELEGRAM_CHANNELS=["@channel_one","@channel_two"]
+```
+
+To add a channel: open it in Telegram → copy the username after `t.me/` → add `@that_name` to the list.
 
 Leave Notion / Gmail empty until you want them.  
 Foreign search (freehire / LinkedIn) can stay off for a med-focused Ethiopia setup:

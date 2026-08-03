@@ -34,26 +34,59 @@ def _env(name: str, default: str = "") -> str:
 # --- Telegram ---
 TELEGRAM_API_ID = _env("TELEGRAM_API_ID")
 TELEGRAM_API_HASH = _env("TELEGRAM_API_HASH")
-# Single channel (legacy) or comma-separated list via TELEGRAM_CHANNELS
+# Single channel (legacy) or list via TELEGRAM_CHANNELS (comma / JSON array)
 TELEGRAM_CHANNEL = _env("TELEGRAM_CHANNEL")
 _TELEGRAM_CHANNELS_RAW = _env("TELEGRAM_CHANNELS")
 
 
+def _normalize_channel(part: str) -> str | None:
+    """Turn @handle, username, or t.me link into a canonical @username."""
+    ch = part.strip().strip('"').strip("'")
+    if not ch:
+        return None
+    if ch.startswith("https://t.me/"):
+        ch = ch.rstrip("/").split("/")[-1]
+    elif ch.startswith("t.me/"):
+        ch = ch.rstrip("/").split("/")[-1]
+    ch = ch.lstrip("@")
+    if not ch:
+        return None
+    return f"@{ch}"
+
+
 def telegram_channels() -> list[str]:
-    """All channels to scan. Prefers TELEGRAM_CHANNELS; falls back to TELEGRAM_CHANNEL."""
-    raw = _TELEGRAM_CHANNELS_RAW or TELEGRAM_CHANNEL
+    """All channels to scan as a list of @usernames.
+
+    Prefers TELEGRAM_CHANNELS; falls back to TELEGRAM_CHANNEL.
+    Accepts:
+      - comma / semicolon list:  @a,@b,@c
+      - JSON array:              ["@a","@b"] or [@a,@b]
+      - t.me links mixed in
+    """
+    import json
+    import re
+
+    raw = (_TELEGRAM_CHANNELS_RAW or TELEGRAM_CHANNEL).strip()
+    if not raw:
+        return []
+
+    parts: list[str] = []
+    if raw.startswith("["):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                parts = [str(x) for x in parsed]
+        except json.JSONDecodeError:
+            # Allow [@a,@b] without quotes
+            inner = raw.strip("[]")
+            parts = re.split(r"[,;]", inner)
+    else:
+        parts = re.split(r"[,;\n]", raw)
+
     channels: list[str] = []
-    for part in raw.replace(";", ",").split(","):
-        ch = part.strip()
-        if not ch:
-            continue
-        if ch.startswith("https://t.me/"):
-            ch = "@" + ch.rstrip("/").split("/")[-1]
-        elif ch.startswith("t.me/"):
-            ch = "@" + ch.rstrip("/").split("/")[-1]
-        elif not ch.startswith("@"):
-            ch = "@" + ch.lstrip("@")
-        if ch not in channels:
+    for part in parts:
+        ch = _normalize_channel(part)
+        if ch and ch not in channels:
             channels.append(ch)
     return channels
 
