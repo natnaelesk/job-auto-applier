@@ -47,7 +47,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     last_response_at TEXT,
     response_summary TEXT,
     notes TEXT,
-    apply_answers TEXT                 -- JSON list of {label, answer}
+    apply_answers TEXT,                -- JSON list of {label, answer}
+    notion_dirty INTEGER DEFAULT 1,    -- 1 = needs push to Notion (SQLite is source of truth)
+    market TEXT DEFAULT 'ethiopia',    -- ethiopia | foreign
+    source TEXT DEFAULT 'telegram'     -- telegram | freehire | linkedin
 );
 """
 
@@ -61,7 +64,13 @@ _MIGRATIONS = [
     ("apply_target", "TEXT"),
     ("notes", "TEXT"),
     ("apply_answers", "TEXT"),
+    ("notion_dirty", "INTEGER DEFAULT 1"),
+    ("market", "TEXT DEFAULT 'ethiopia'"),
+    ("source", "TEXT DEFAULT 'telegram'"),
 ]
+
+# Fields that only bookkeep Notion sync — changing them must not re-dirty the row.
+_NOTION_SYNC_META = frozenset({"notion_page_id", "notion_dirty"})
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
@@ -69,11 +78,25 @@ def _migrate(conn: sqlite3.Connection) -> None:
         row[1]
         for row in conn.execute("PRAGMA table_info(jobs)").fetchall()
     }
+    added_dirty = False
     for name, col_type in _MIGRATIONS:
         if name not in existing:
             conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {col_type}")
+            if name == "notion_dirty":
+                added_dirty = True
+    if added_dirty:
+        # Already mirrored pages are clean; unsynced skipped stay out of Notion.
+        conn.execute(
+            """UPDATE jobs SET notion_dirty = 0
+               WHERE notion_page_id IS NOT NULL AND notion_page_id != ''"""
+        )
+        conn.execute(
+            """UPDATE jobs SET notion_dirty = 0
+               WHERE (notion_page_id IS NULL OR notion_page_id = '')
+                 AND status = 'skipped'"""
+        )
+        # Unsynced non-skipped remain dirty (DEFAULT 1) for the next incremental sync.
     conn.commit()
-
 
 def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -120,11 +143,14 @@ def save_job(conn, message_id: int, job: dict) -> bool:
     if method == "email" and target and not link:
         link = target
     key = _dedup_key(job.get("company", ""), job.get("title", ""), link or "")
+    market = job.get("market") or "ethiopia"
+    source = job.get("source") or "telegram"
     cur = conn.execute(
         """INSERT OR IGNORE INTO jobs
            (message_id, dedup_key, company, title, location, salary, experience,
-            skills, link, apply_method, apply_target, description, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            skills, link, apply_method, apply_target, description, created_at,
+            notion_dirty, market, source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)""",
         (
             message_id,
             key,
@@ -139,26 +165,54 @@ def save_job(conn, message_id: int, job: dict) -> bool:
             target,
             job.get("description"),
             datetime.now(timezone.utc).isoformat(),
+            market,
+            source,
         ),
     )
     conn.commit()
     return cur.rowcount > 0
 
 
-def jobs_with_status(conn, status: str) -> list[sqlite3.Row]:
+def save_foreign_job(conn, job: dict) -> bool:
+    """Insert a foreign-market job (no Telegram message). Returns True if new."""
+    payload = {
+        **job,
+        "market": job.get("market") or "foreign",
+        "source": job.get("source") or "freehire",
+        "apply_method": job.get("apply_method") or "url",
+    }
+    return save_job(conn, message_id=None, job=payload)
+
+
+def jobs_with_status(conn, status: str, market: str | None = None) -> list[sqlite3.Row]:
+    if market:
+        return conn.execute(
+            """SELECT * FROM jobs
+               WHERE status = ? AND COALESCE(market, 'ethiopia') = ?
+               ORDER BY created_at""",
+            (status, market),
+        ).fetchall()
     return conn.execute(
         "SELECT * FROM jobs WHERE status = ? ORDER BY created_at", (status,)
     ).fetchall()
 
 
-def status_counts(conn=None) -> dict[str, int]:
+def status_counts(conn=None, market: str | None = None) -> dict[str, int]:
     """Return {status: count, ..., 'all': total} for dashboard counters."""
     own = conn is None
     if own:
         conn = connect()
-    rows = conn.execute(
-        "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status"
-    ).fetchall()
+    if market:
+        rows = conn.execute(
+            """SELECT status, COUNT(*) AS n FROM jobs
+               WHERE COALESCE(market, 'ethiopia') = ?
+               GROUP BY status""",
+            (market,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status"
+        ).fetchall()
     counts = {r["status"]: int(r["n"]) for r in rows}
     counts["all"] = sum(counts.values())
     if own:
@@ -166,20 +220,52 @@ def status_counts(conn=None) -> dict[str, int]:
     return counts
 
 
-def recent_jobs(conn=None, limit: int = 40) -> list[sqlite3.Row]:
+def market_status_counts(conn=None) -> dict[str, dict[str, int]]:
+    """Return {ethiopia: {status: n}, foreign: {status: n}, all: {...}}."""
     own = conn is None
     if own:
         conn = connect()
-    rows = conn.execute(
-        """
-        SELECT id, company, title, status, match_score, salary, location,
-               last_response_at, response_summary, applied_at, created_at
-        FROM jobs
-        ORDER BY COALESCE(last_response_at, applied_at, created_at) DESC
-        LIMIT ?
-        """,
-        (limit,),
-    ).fetchall()
+    out = {
+        "ethiopia": status_counts(conn, market="ethiopia"),
+        "foreign": status_counts(conn, market="foreign"),
+        "all": status_counts(conn),
+    }
+    if own:
+        conn.close()
+    return out
+
+
+def recent_jobs(conn=None, limit: int = 40, market: str | None = None) -> list[sqlite3.Row]:
+    own = conn is None
+    if own:
+        conn = connect()
+    if market:
+        rows = conn.execute(
+            """
+            SELECT id, company, title, status, match_score, salary, location,
+                   last_response_at, response_summary, applied_at, created_at,
+                   COALESCE(market, 'ethiopia') AS market,
+                   COALESCE(source, 'telegram') AS source
+            FROM jobs
+            WHERE COALESCE(market, 'ethiopia') = ?
+            ORDER BY COALESCE(last_response_at, applied_at, created_at) DESC
+            LIMIT ?
+            """,
+            (market, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT id, company, title, status, match_score, salary, location,
+                   last_response_at, response_summary, applied_at, created_at,
+                   COALESCE(market, 'ethiopia') AS market,
+                   COALESCE(source, 'telegram') AS source
+            FROM jobs
+            ORDER BY COALESCE(last_response_at, applied_at, created_at) DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
     if own:
         conn.close()
     return rows
@@ -206,6 +292,39 @@ def recent_email_updates(conn=None, limit: int = 25) -> list[sqlite3.Row]:
 
 
 def update_job(conn, job_id: int, **fields) -> None:
+    if not fields:
+        return
+    # Any content change means Notion is stale; sync meta alone does not.
+    if set(fields) - _NOTION_SYNC_META and "notion_dirty" not in fields:
+        fields = {**fields, "notion_dirty": 1}
     cols = ", ".join(f"{k} = ?" for k in fields)
     conn.execute(f"UPDATE jobs SET {cols} WHERE id = ?", (*fields.values(), job_id))
     conn.commit()
+
+
+def jobs_needing_notion_sync(
+    conn, *, full: bool = False, market: str | None = None
+) -> list[sqlite3.Row]:
+    """Rows to push to Notion. Incremental = dirty only; full = everything."""
+    if full and market:
+        return conn.execute(
+            """SELECT * FROM jobs
+               WHERE COALESCE(market, 'ethiopia') = ?
+               ORDER BY id""",
+            (market,),
+        ).fetchall()
+    if full:
+        return conn.execute("SELECT * FROM jobs ORDER BY id").fetchall()
+    if market:
+        return conn.execute(
+            """SELECT * FROM jobs
+               WHERE COALESCE(notion_dirty, 1) = 1
+                 AND COALESCE(market, 'ethiopia') = ?
+               ORDER BY id""",
+            (market,),
+        ).fetchall()
+    return conn.execute(
+        """SELECT * FROM jobs
+           WHERE COALESCE(notion_dirty, 1) = 1
+           ORDER BY id"""
+    ).fetchall()

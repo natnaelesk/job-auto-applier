@@ -48,6 +48,8 @@ class OrchestratorApp(ctk.CTk):
         self._live_progress: ctk.CTkLabel | None = None
 
         self._start_worker()
+        self._apply_market = "all"  # all | ethiopia | foreign
+        self._market_split_label: ctk.CTkLabel | None = None
         self._build()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(100, self._refresh_dashboard)
@@ -104,11 +106,13 @@ class OrchestratorApp(ctk.CTk):
         self._tabs.pack(fill="both", expand=True, padx=18, pady=(0, 16))
         self._tabs.add("General")
         self._tabs.add("Gather")
+        self._tabs.add("Search")
         self._tabs.add("Apply")
         self._tabs.add("Updates")
 
         self._build_general(self._tabs.tab("General"))
         self._build_gather(self._tabs.tab("Gather"))
+        self._build_search(self._tabs.tab("Search"))
         self._build_apply(self._tabs.tab("Apply"))
         self._build_updates(self._tabs.tab("Updates"))
 
@@ -181,8 +185,16 @@ class OrchestratorApp(ctk.CTk):
             text_color=C.INK,
         ).pack(anchor="w", padx=14, pady=(12, 6))
         self._counter_host = ctk.CTkFrame(counts_card, fg_color="transparent")
-        self._counter_host.pack(fill="x", padx=10, pady=(0, 12))
+        self._counter_host.pack(fill="x", padx=10, pady=(0, 4))
         self._rebuild_counters({})
+        self._market_split_label = ctk.CTkLabel(
+            counts_card,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color=C.INK_DIM,
+            anchor="w",
+        )
+        self._market_split_label.pack(fill="x", padx=14, pady=(0, 12))
 
         boards = ctk.CTkFrame(parent, fg_color="transparent")
         boards.pack(fill="both", expand=True, padx=4, pady=(0, 4))
@@ -262,6 +274,7 @@ class OrchestratorApp(ctk.CTk):
         counts = db.status_counts()
         self._rebuild_counters(counts)
         self._update_gather_counts()
+        self._update_market_split()
 
         emails = db.recent_email_updates(limit=30)
         elines = []
@@ -283,6 +296,141 @@ class OrchestratorApp(ctk.CTk):
         )
         if hasattr(self, "_updates_email"):
             self._refresh_updates_emails()
+        if hasattr(self, "_search_results"):
+            self._refresh_search_results()
+
+    def _update_market_split(self) -> None:
+        if self._market_split_label is None:
+            return
+        split = db.market_status_counts()
+        eth = split.get("ethiopia") or {}
+        foreign = split.get("foreign") or {}
+        self._market_split_label.configure(
+            text=(
+                f"Ethiopia · Applied {eth.get('applied', 0)}  Matched {eth.get('matched', 0)}  "
+                f"Interview {eth.get('interview', 0)}"
+                f"    |    Foreign · Applied {foreign.get('applied', 0)}  "
+                f"Matched {foreign.get('matched', 0)}  Interview {foreign.get('interview', 0)}"
+            )
+        )
+
+    def _update_gather_counts(self) -> None:
+        if not hasattr(self, "_gather_counts"):
+            return
+        counts = db.status_counts()
+        eth = db.status_counts(market="ethiopia")
+        foreign = db.status_counts(market="foreign")
+        bits = [
+            f"All {counts.get('all', 0)}",
+            f"Matched {counts.get('matched', 0)}",
+            f"Review {counts.get('review', 0)}",
+            f"Applied {counts.get('applied', 0)} "
+            f"(ET {eth.get('applied', 0)} / Foreign {foreign.get('applied', 0)})",
+            f"Closed {counts.get('closed', 0)}",
+            f"Skipped {counts.get('skipped', 0)}",
+        ]
+        self._gather_counts.configure(text="  ·  ".join(bits))
+
+    def _build_search(self, parent) -> None:
+        parent.configure(fg_color=C.SURFACE)
+        import config as cfg
+
+        ctk.CTkLabel(
+            parent,
+            text="Foreign search — freehire.dev + LinkedIn guest → match → Foreign Jobs Hunt",
+            font=ctk.CTkFont(size=13),
+            text_color=C.INK_DIM,
+            anchor="w",
+        ).pack(fill="x", padx=8, pady=(4, 6))
+
+        queries = ", ".join(cfg.foreign_search_queries())
+        self._search_query_label = ctk.CTkLabel(
+            parent,
+            text=f"Queries: {queries}\nLocation: {cfg.FOREIGN_SEARCH_LOCATION}  ·  "
+            f"Days: {cfg.FOREIGN_SEARCH_DAYS}  ·  "
+            f"freehire={'on' if cfg.FREEHIRE_ENABLED else 'off'}  "
+            f"linkedin={'on' if cfg.LINKEDIN_ENABLED else 'off'}",
+            font=ctk.CTkFont(size=12),
+            text_color=C.INK,
+            anchor="w",
+            justify="left",
+        )
+        self._search_query_label.pack(fill="x", padx=8, pady=(0, 8))
+
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", padx=4, pady=4)
+        self._primary(
+            row, text="Start Search", width=140, command=self._run_foreign_search
+        ).pack(side="left", padx=4)
+        self._secondary(
+            row, text="CVs + Notion", width=120, command=self._agent_cv
+        ).pack(side="left", padx=4)
+        self._secondary(
+            row, text="Refresh list", width=110, command=self._refresh_search_results
+        ).pack(side="left", padx=4)
+
+        ctk.CTkLabel(
+            parent,
+            text="Matched foreign jobs",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=C.INK,
+            anchor="w",
+        ).pack(fill="x", padx=10, pady=(8, 2))
+        self._search_results = ctk.CTkTextbox(
+            parent,
+            height=200,
+            font=ctk.CTkFont(family="Consolas", size=12),
+            fg_color=C.LOG_BG,
+            text_color=C.LOG_FG,
+            border_color=C.LINE,
+        )
+        self._search_results.pack(fill="x", padx=8, pady=4)
+        self._search_results.configure(state="disabled")
+
+        self._search_log = self._make_log(parent, height=260)
+        self._refresh_search_results()
+
+    def _refresh_search_results(self) -> None:
+        if not hasattr(self, "_search_results"):
+            return
+        conn = db.connect()
+        rows = conn.execute(
+            """
+            SELECT id, company, title, status, match_score,
+                   COALESCE(source, 'foreign') AS source
+            FROM jobs
+            WHERE COALESCE(market, 'ethiopia') = 'foreign'
+              AND status IN ('matched', 'review', 'found', 'applying', 'applied',
+                             'manual', 'later', 'interview')
+            ORDER BY
+              CASE status WHEN 'matched' THEN 0 WHEN 'review' THEN 1 ELSE 2 END,
+              COALESCE(match_score, 0) DESC,
+              id DESC
+            LIMIT 40
+            """
+        ).fetchall()
+        conn.close()
+        lines = []
+        for r in rows:
+            score = r["match_score"] if r["match_score"] is not None else "—"
+            lines.append(
+                f"#{r['id']:4d} [{r['status']:8s}] {score:>3}  "
+                f"{(r['source'] or '?'):8s}  "
+                f"{(r['company'] or '?')[:28]:28s}  {(r['title'] or '?')[:42]}"
+            )
+        self._set_board(
+            self._search_results,
+            "\n".join(lines)
+            if lines
+            else "No foreign jobs yet.\nClick Start Search.",
+        )
+
+    def _run_foreign_search(self) -> None:
+        def work():
+            apply_agent.run_foreign_search(log=self._dual("search"))
+            self._ui(self._refresh_search_results)
+
+        self._bg("search", work)
 
     def _build_gather(self, parent) -> None:
         parent.configure(fg_color=C.SURFACE)
@@ -323,20 +471,6 @@ class OrchestratorApp(ctk.CTk):
 
         self._gather_log = self._make_log(parent, height=420)
         self._update_gather_counts()
-
-    def _update_gather_counts(self) -> None:
-        if not hasattr(self, "_gather_counts"):
-            return
-        counts = db.status_counts()
-        bits = [
-            f"All {counts.get('all', 0)}",
-            f"Matched {counts.get('matched', 0)}",
-            f"Review {counts.get('review', 0)}",
-            f"Applied {counts.get('applied', 0)}",
-            f"Closed {counts.get('closed', 0)}",
-            f"Skipped {counts.get('skipped', 0)}",
-        ]
-        self._gather_counts.configure(text="  ·  ".join(bits))
 
     def _build_updates(self, parent) -> None:
         parent.configure(fg_color=C.SURFACE)
@@ -380,6 +514,23 @@ class OrchestratorApp(ctk.CTk):
             text_color=C.INK_DIM,
             anchor="w",
         ).pack(fill="x", padx=8, pady=(4, 6))
+
+        market_row = ctk.CTkFrame(body, fg_color="transparent")
+        market_row.pack(fill="x", padx=8, pady=(0, 6))
+        ctk.CTkLabel(
+            market_row,
+            text="Market:",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=C.INK,
+        ).pack(side="left", padx=(0, 8))
+        self._market_btn = ctk.CTkSegmentedButton(
+            market_row,
+            values=["All", "Ethiopia", "Foreign"],
+            command=self._on_apply_market,
+            width=280,
+        )
+        self._market_btn.set("All")
+        self._market_btn.pack(side="left")
 
         self._job_label = ctk.CTkLabel(
             body,
@@ -465,8 +616,8 @@ class OrchestratorApp(ctk.CTk):
             anchor="w",
         ).pack(fill="x", padx=10, pady=(8, 2))
 
-        ans_wrap = ctk.CTkScrollableFrame(body, height=160, fg_color=C.SURFACE_2)
-        ans_wrap.pack(fill="x", padx=8, pady=4)
+        ans_wrap = ctk.CTkScrollableFrame(body, height=220, fg_color=C.SURFACE_2)
+        ans_wrap.pack(fill="both", expand=False, padx=8, pady=4)
         self._answers_frame = ans_wrap
 
         ctk.CTkLabel(
@@ -574,6 +725,7 @@ class OrchestratorApp(ctk.CTk):
                     "apply": getattr(self, "_apply_log", None),
                     "updates": getattr(self, "_updates_log", None),
                     "general": getattr(self, "_general_log", None),
+                    "search": getattr(self, "_search_log", None),
                 }.get(tab) or getattr(self, "_apply_log", None)
                 if box is None:
                     continue
@@ -694,7 +846,7 @@ class OrchestratorApp(ctk.CTk):
             import notion_tracker
 
             log = self._dual("gather")
-            log("[Notion] Starting…")
+            log("[Notion] Starting (incremental)…")
             c, u = notion_tracker.sync_jobs(log=log)
             log(f"[Notion] Summary: {c} created, {u} updated")
 
@@ -751,13 +903,26 @@ class OrchestratorApp(ctk.CTk):
             hits = sorted(cover_dir.glob(f"CoverLetter_{token}*")) if cover_dir.exists() and token else []
             cover_line = hits[-1].name if hits else "(none yet — click Cover Letter)"
 
+        market = "ethiopia"
+        source = "telegram"
+        try:
+            market = j["market"] or "ethiopia"
+        except (KeyError, IndexError):
+            pass
+        try:
+            source = j["source"] or "telegram"
+        except (KeyError, IndexError):
+            pass
+
         self._job_label.configure(
             text=(
-                f"#{j['id']}  [{j['status']}]  score={j['match_score']}\n"
+                f"#{j['id']}  [{j['status']}]  score={j['match_score']}  "
+                f"[{market}/{source}]\n"
                 f"{j['company']} — {j['title']}"
             )
         )
         details = (
+            f"Market: {market}  ·  Source: {source}\n"
             f"CV: {cv_name}\n"
             f"CV path: {cv_path}\n"
             f"Cover letter: {cover_line}\n"
@@ -780,19 +945,29 @@ class OrchestratorApp(ctk.CTk):
         for child in self._answers_frame.winfo_children():
             child.destroy()
         self._answer_widgets.clear()
+        # Wrap long questions inside the panel (no horizontal overflow).
+        wrap = max(360, int(self.winfo_width()) - 120)
         for i, f in enumerate(fields):
             label = f.get("label") or f"Field {i + 1}"
             answer = f.get("answer") or ""
-            row = ctk.CTkFrame(self._answers_frame, fg_color="transparent")
-            row.pack(fill="x", pady=3)
+            block = ctk.CTkFrame(self._answers_frame, fg_color="transparent")
+            block.pack(fill="x", pady=6)
             ctk.CTkLabel(
-                row, text=label, width=180, anchor="w", text_color=C.INK_DIM
-            ).pack(side="left")
+                block,
+                text=label,
+                anchor="w",
+                justify="left",
+                wraplength=wrap,
+                text_color=C.INK_DIM,
+                font=ctk.CTkFont(size=12),
+            ).pack(fill="x", padx=2, pady=(0, 4))
+            row = ctk.CTkFrame(block, fg_color="transparent")
+            row.pack(fill="x")
             ent = ctk.CTkEntry(
                 row, fg_color=C.LOG_BG, border_color=C.LINE, text_color=C.INK
             )
             ent.insert(0, answer)
-            ent.pack(side="left", fill="x", expand=True, padx=6)
+            ent.pack(side="left", fill="x", expand=True, padx=(2, 6))
 
             def copy_one(e=ent):
                 self.clipboard_clear()
@@ -802,9 +977,16 @@ class OrchestratorApp(ctk.CTk):
             self._secondary(row, text="Copy", width=60, command=copy_one).pack(side="right")
             self._answer_widgets.append((ent, label))
 
+    def _on_apply_market(self, value: str) -> None:
+        mapping = {"All": "all", "Ethiopia": "ethiopia", "Foreign": "foreign"}
+        self._apply_market = mapping.get(value, "all")
+        self.log("apply", f"Market filter → {value}")
+
     def _apply_start(self) -> None:
         def work():
             s = self._ensure_session()
+            m = None if self._apply_market == "all" else self._apply_market
+            s.market_filter = m
             resume_id = int(s.job["id"]) if s.job else None
             s.start(resume_id=resume_id)
             self._ui(self._refresh_job_label)
@@ -815,6 +997,8 @@ class OrchestratorApp(ctk.CTk):
     def _apply_open(self) -> None:
         def work():
             s = self._ensure_session()
+            m = None if self._apply_market == "all" else self._apply_market
+            s.market_filter = m
             if not s.jobs:
                 s.start()
             s.open_current()

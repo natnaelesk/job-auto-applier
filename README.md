@@ -1,63 +1,95 @@
 # Job Auto-Applier
 
-An AI-assisted job pipeline you orchestrate:
+AI-assisted job pipeline you run locally:
 
-1. Scans a Telegram job channel for new postings
-2. Scores each job against your profile
-3. Generates a tailored CV PDF for each match
-4. Syncs everything to Notion
-5. **Apply (you drive):** opens links in Chrome; screenshot → AI answers
-   (copyable) or Form Fill; you mark Applied / Closed / Later
-6. Scans Gmail for company replies and updates the tracker
+1. Scan Telegram job channels (and optionally foreign boards: freehire / LinkedIn guest)
+2. Score jobs against **your** profile
+3. Generate tailored CV PDFs
+4. Sync to Notion (optional; SQLite is source of truth)
+5. **Apply tab (you drive):** open links, screenshot → AI answers, mark Applied / Closed
+6. Scan Gmail for replies (optional)
 
-Built with Python, Playwright, Telethon, the Cursor SDK, and the Notion & Gmail APIs.
+Stack: Python, Telethon, Cursor SDK, Playwright, Notion API, Gmail API, CustomTkinter.
 
-**Full architecture and build phases: see [PLAN.md](PLAN.md).**
+**Architecture notes:** [PLAN.md](PLAN.md)  
+**Install from a fresh clone:** **[SETUP.md](SETUP.md)** ← start here
 
-## Setup
+---
 
-1. Copy profile templates (your real profile stays local / git-ignored):
-   ```bash
-   cp profile/about_me.example.md profile/about_me.md
-   cp profile/master_cv.example.md profile/master_cv.md
-   cp profile/answers.example.md profile/answers.md
-   ```
-   Then fill them with your facts. Optional upload docs: see `profile/docs/README.example.md`.
-2. Copy `.env.example` to `.env` and add credentials
-3. `pip install -r requirements.txt`
-4. (Optional) Real Chrome CDP for Google login:
-   `powershell -ExecutionPolicy Bypass -File scripts/start_real_chrome.ps1`
-5. (Gmail) Place `credentials.json` in the project root (git-ignored)
-6. Run: `python src/main.py ui`
+## Quick start (Windows)
 
-### Useful commands
-
-```bash
-python src/main.py ui             # orchestrator only (Gather / Apply / Updates tabs)
-python src/main.py apply          # same — opens orchestrator
-python src/main.py scan extract match cv notion   # prepare only
-python src/main.py gmail          # email replies only
+```powershell
+git clone https://github.com/natnaelesk/job-auto-applier.git
+cd job-auto-applier
+powershell -ExecutionPolicy Bypass -File scripts/setup_fresh.ps1
 ```
 
-### Orchestrator (control panel)
+Then:
 
-Three tabs:
+1. Edit `.env` — Telegram API + `CURSOR_API_KEY`
+2. Edit `profile/about_me.md`, `master_cv.md`, `answers.md`
+3. `.\.venv\Scripts\python.exe src\main.py scan`  (Telegram login once)
+4. `.\.venv\Scripts\python.exe src\main.py ui`
 
-| Tab | What it does |
-|-----|----------------|
-| **Gather (1–4)** | Telegram → extract → match → CVs → Notion |
-| **Apply (5)** | Open job link → Page / Scroll / **Region** screenshots → **Analyze Form** → copyable answers or **Form Fill** → notes → **Applied / Closed / Later** → Next → Notion each time |
-| **Updates (6)** | Gmail scan + Notion |
+Or: `scripts\launch_ui.bat`
 
-Apply flow is human-orchestrated: the agent prepares answers and can fill forms when you click **Form Fill**; you submit and mark status.
+---
+
+## What is / is not in GitHub
+
+| In the repo (safe to clone) | Local only (never committed) |
+|-----------------------------|------------------------------|
+| Source code, prompts, UI | `.env` (API keys) |
+| `profile/*.example.md` templates | `profile/about_me.md`, `master_cv.md`, `answers.md` |
+| `.env.example` | `credentials.json`, `token.json` |
+| Setup scripts | `data/` (DB, Telegram session) |
+| | `output/` (generated CVs) |
+
+Each person who clones must create **their own** credentials and profile.
+
+---
+
+## App tabs
+
+| Tab | Purpose |
+|-----|---------|
+| **General** | Dashboard + run agents |
+| **Gather** | Telegram → extract → match → CVs → Notion |
+| **Search** | Foreign search (freehire / LinkedIn) — optional |
+| **Apply** | Human apply queue (Ethiopia / Foreign / All) |
+| **Updates** | Gmail replies |
+
+---
+
+## Useful commands
+
+```powershell
+.\.venv\Scripts\python.exe src\main.py ui
+.\.venv\Scripts\python.exe src\main.py scan extract match cv notion
+.\.venv\Scripts\python.exe src\main.py search-foreign
+.\.venv\Scripts\python.exe src\main.py gmail
+.\.venv\Scripts\python.exe src\main.py notion-full
+```
+
+---
+
+## Sharing with someone else (e.g. family)
+
+1. They clone this repo on **their** PC  
+2. Run `scripts/setup_fresh.ps1`  
+3. Use **their** Telegram + Cursor key + Notion  
+4. Fill profile for **their** field (dev, medical, etc.)  
+5. Do **not** send them your `.env` or real profile files  
+
+Details: [SETUP.md](SETUP.md)
+
+---
 
 ## Status
 
-- [x] Phase 0 — Scaffold & profile templates
-- [x] Phase 1 — Telegram watcher
-- [x] Phase 2 — Job matcher
-- [x] Phase 3 — CV generator
-- [x] Phase 4 — Notion tracker
-- [x] Phase 5 — Orchestrated apply (screenshots + AI answers + Form Fill)
-- [x] Phase 6 — Gmail scanner
-- [ ] Phase 7 — Scheduler
+- [x] Telegram watcher + multi-channel
+- [x] Match + CV + Notion (Ethiopia + Foreign DBs)
+- [x] Foreign sources (freehire, LinkedIn guest)
+- [x] Orchestrated Apply UI
+- [x] Gmail scanner
+- [ ] Scheduler (optional)

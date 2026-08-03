@@ -64,34 +64,61 @@ def _open_system_url(url: str) -> None:
         raise RuntimeError(f"Could not open browser for {url}")
 
 
-def load_apply_queue(limit: int | None = None) -> list:
+def load_apply_queue(
+    limit: int | None = None,
+    market: str | None = None,
+) -> list:
     """Jobs ready for human-orchestrated apply (have a CV).
 
     Keeps unmatched-in-progress work: applying / later / manual stay in the
     queue until Applied or Closed. Applying jobs are listed first so Reload
     resumes them instead of jumping to a new matched job.
+
+    market: None = all, 'ethiopia' | 'foreign' to filter.
     """
     limit = limit if limit is not None else max(config.MAX_APPLY_PER_RUN, 50)
     conn = db.connect()
-    rows = conn.execute(
-        """
-        SELECT * FROM jobs
-        WHERE cv_path IS NOT NULL AND cv_path != ''
-          AND status IN ('matched', 'later', 'manual', 'applying', 'failed')
-        ORDER BY
-          CASE status
-            WHEN 'applying' THEN 0
-            WHEN 'matched' THEN 1
-            WHEN 'later' THEN 2
-            WHEN 'manual' THEN 3
-            ELSE 4
-          END,
-          match_score DESC,
-          id ASC
-        LIMIT ?
-        """,
-        (limit,),
-    ).fetchall()
+    if market:
+        rows = conn.execute(
+            """
+            SELECT * FROM jobs
+            WHERE cv_path IS NOT NULL AND cv_path != ''
+              AND status IN ('matched', 'later', 'manual', 'applying', 'failed')
+              AND COALESCE(market, 'ethiopia') = ?
+            ORDER BY
+              CASE status
+                WHEN 'applying' THEN 0
+                WHEN 'matched' THEN 1
+                WHEN 'later' THEN 2
+                WHEN 'manual' THEN 3
+                ELSE 4
+              END,
+              match_score DESC,
+              id ASC
+            LIMIT ?
+            """,
+            (market, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM jobs
+            WHERE cv_path IS NOT NULL AND cv_path != ''
+              AND status IN ('matched', 'later', 'manual', 'applying', 'failed')
+            ORDER BY
+              CASE status
+                WHEN 'applying' THEN 0
+                WHEN 'matched' THEN 1
+                WHEN 'later' THEN 2
+                WHEN 'manual' THEN 3
+                ELSE 4
+              END,
+              match_score DESC,
+              id ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
     conn.close()
     return list(rows)
 
@@ -116,6 +143,7 @@ class ApplySession:
         self.answers_bank = _read(config.PROFILE_DIR / "answers.md")
         self._started = False
         self.system_browser = bool(getattr(config, "APPLY_SYSTEM_BROWSER", True))
+        self.market_filter: str | None = None  # None | ethiopia | foreign
 
     @property
     def job(self):
@@ -128,7 +156,11 @@ class ApplySession:
         if keep_id is None and self.job is not None:
             keep_id = int(self.job["id"])
 
-        self.jobs = jobs if jobs is not None else load_apply_queue()
+        self.jobs = (
+            jobs
+            if jobs is not None
+            else load_apply_queue(market=self.market_filter)
+        )
         self.index = 0
         resumed = False
         if keep_id is not None:
@@ -244,7 +276,7 @@ class ApplySession:
             )
 
         if self.index + 1 >= len(self.jobs):
-            self.jobs = load_apply_queue()
+            self.jobs = load_apply_queue(market=self.market_filter)
             self.index = 0
             self.shots = []
             self.answers = []
@@ -495,15 +527,15 @@ def run_extract_match(log=None) -> dict:
 
 
 def run_cv_notion(log=None) -> tuple[int, int, int]:
-    import cv_generator
+    from services.notion_cv_service import NotionCVService
 
     log = log or print
-    log("[CV] Starting…")
-    cvs = cv_generator.generate_for_matched(log=log)
-    log(f"[CV] Summary: {cvs} CV(s)")
-    log("[Notion] Starting…")
-    c, u = notion_tracker.sync_jobs(log=log)
-    log(f"[Notion] Summary: {c} created, {u} updated")
+    result = NotionCVService(log=log).generate_and_sync()
+    cvs = int(result.get("cvs") or 0)
+    eth = result.get("ethiopia") or {}
+    foreign = result.get("foreign") or {}
+    c = int(eth.get("created") or 0) + int(foreign.get("created") or 0)
+    u = int(eth.get("updated") or 0) + int(foreign.get("updated") or 0)
     return cvs, c, u
 
 
@@ -516,15 +548,23 @@ def run_gather_pipeline(log=None) -> None:
 
 
 def run_gmail_pipeline(log=None) -> None:
-    import gmail_scanner
+    from services.email_service import EmailService
+    from services.notion_cv_service import NotionCVService
 
     log = log or print
-    log("[Gmail] Starting…")
-    counts = gmail_scanner.scan_inbox(log=log)
-    log(f"[Gmail] Summary: {counts}")
-    log("[Notion] Syncing after Gmail…")
-    c, u = notion_tracker.sync_jobs(log=log)
-    log(f"[Notion] Summary: {c} created, {u} updated")
+    EmailService(log=log).scan()
+    log("[Notion] Syncing dirty jobs after Gmail…")
+    NotionCVService(log=log).sync_notion()
+
+
+def run_foreign_search(log=None) -> dict:
+    from services.search_service import SearchService
+    from services.notion_cv_service import NotionCVService
+
+    log = log or print
+    result = SearchService(log=log).search_foreign(match=True)
+    NotionCVService(log=log).generate_and_sync()
+    return result
 
 
 def run_all_pipeline(log=None) -> None:

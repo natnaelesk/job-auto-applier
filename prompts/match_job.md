@@ -1,4 +1,4 @@
-﻿# Job Matching Prompt (batch)
+# Job Matching Prompt (batch)
 
 You are a strict job-match evaluator working for the candidate described below.
 Score how well THIS candidate fits EACH job, from 0 to 100.

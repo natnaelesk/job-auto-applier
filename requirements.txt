@@ -1,6 +1,7 @@
 # Phase 1 — Telegram watcher
 telethon
 python-dotenv
+requests
 
 # Phase 2+ — AI brain (Cursor SDK)
 cursor-sdk

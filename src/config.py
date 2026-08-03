@@ -19,6 +19,7 @@ TELEGRAM_SESSION = str(DATA_DIR / "telegram")
 DATA_DIR.mkdir(exist_ok=True)
 (OUTPUT_DIR / "cvs").mkdir(parents=True, exist_ok=True)
 (OUTPUT_DIR / "cvs" / "cover_letter").mkdir(parents=True, exist_ok=True)
+(OUTPUT_DIR / "cvs" / "general").mkdir(parents=True, exist_ok=True)
 (OUTPUT_DIR / "screenshots").mkdir(parents=True, exist_ok=True)
 
 def _env(name: str, default: str = "") -> str:
@@ -63,6 +64,29 @@ CURSOR_MODEL = _env("CURSOR_MODEL", "composer-2.5")
 # --- Notion ---
 NOTION_TOKEN = _env("NOTION_TOKEN")
 NOTION_DATABASE_ID = _env("NOTION_DATABASE_ID")
+# Separate database for foreign / remote-global jobs (auto-created on first sync)
+NOTION_FOREIGN_DATABASE_ID = _env("NOTION_FOREIGN_DATABASE_ID")
+
+# --- Foreign job search (freehire + LinkedIn guest) ---
+FOREIGN_SEARCH_QUERIES = _env(
+    "FOREIGN_SEARCH_QUERIES",
+    "backend developer,full stack developer,python developer,react developer",
+)
+FOREIGN_SEARCH_LOCATION = _env("FOREIGN_SEARCH_LOCATION", "Remote")
+FOREIGN_SEARCH_DAYS = int(_env("FOREIGN_SEARCH_DAYS", "14"))
+FOREIGN_SEARCH_LIMIT = int(_env("FOREIGN_SEARCH_LIMIT", "20"))
+# freehire base URL (swap for self-hosted)
+FREEHIRE_API_URL = _env("FREEHIRE_API_URL", "https://freehire.dev").rstrip("/")
+# LinkedIn guest: keep volume low (ToS). Max pages per query (10 results/page).
+LINKEDIN_MAX_PAGES = int(_env("LINKEDIN_MAX_PAGES", "2"))
+LINKEDIN_ENABLED = _env("LINKEDIN_ENABLED", "true").lower() in {"1", "true", "yes"}
+FREEHIRE_ENABLED = _env("FREEHIRE_ENABLED", "true").lower() in {"1", "true", "yes"}
+
+
+def foreign_search_queries() -> list[str]:
+    """Comma-separated search queries for foreign job portals."""
+    return [q.strip() for q in FOREIGN_SEARCH_QUERIES.split(",") if q.strip()]
+
 
 # --- Gmail ---
 GMAIL_CREDENTIALS_FILE = _env("GMAIL_CREDENTIALS_FILE", "credentials.json")

@@ -3,7 +3,7 @@
 Each phase plugs in here as it gets built. Run everything:
     python src/main.py
 or a single step:
-    python src/main.py scan | extract | apply | ui | gmail
+    python src/main.py scan | extract | apply | ui | gmail | search-foreign
 """
 import asyncio
 import sys
@@ -17,6 +17,9 @@ import notion_tracker
 import telegram_watcher
 from applier import agent as applier_agent
 from applier.orchestrator import launch as launch_ui
+from services.email_service import EmailService
+from services.notion_cv_service import NotionCVService
+from services.search_service import SearchService
 
 
 def step_scan() -> None:
@@ -62,27 +65,44 @@ def step_ui() -> None:
 
 
 def step_notion() -> None:
-    print("[6/7] Syncing everything to Notion...")
-    created, updated = notion_tracker.sync_jobs()
-    print(f"      {created} page(s) created, {updated} updated.")
+    print("[6/7] Syncing dirty jobs to Notion (Ethiopia + Foreign)…")
+    svc = NotionCVService()
+    result = svc.sync_notion()
+    print(f"      {result}")
+
+
+def step_notion_full() -> None:
+    print("[Notion] Full repair sync (all jobs, both markets)…")
+    svc = NotionCVService()
+    result = svc.sync_notion(full=True)
+    print(f"      {result}")
 
 
 def step_gmail() -> None:
     print("[7/7] Scanning Gmail for company replies...")
-    counts = gmail_scanner.scan_inbox()
+    counts = EmailService().scan()
     print(f"      {counts}")
+
+
+def step_search_foreign() -> None:
+    print("[Foreign] Searching freehire + LinkedIn…")
+    result = SearchService().search_foreign(match=True)
+    print(f"      {result}")
+    print("[Foreign] Generating CVs + syncing Foreign Jobs Hunt…")
+    NotionCVService().generate_and_sync()
 
 
 def summary() -> None:
     conn = db.connect()
     rows = conn.execute(
-        "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status"
+        """SELECT COALESCE(market, 'ethiopia') AS market, status, COUNT(*) AS n
+           FROM jobs GROUP BY market, status ORDER BY market, status"""
     ).fetchall()
     conn.close()
     if rows:
         print("\nJob pipeline:")
         for row in rows:
-            print(f"  {row['status']}: {row['n']}")
+            print(f"  [{row['market']}] {row['status']}: {row['n']}")
 
 
 # Default daily order: prepare (1-4) + notion, then human apply UI
@@ -94,11 +114,13 @@ STEPS = {
     "notion": step_notion,
     "apply": step_apply,
     "gmail": step_gmail,
+    "search-foreign": step_search_foreign,
 }
 
 EXTRA_STEPS = {
     "rematch": step_rematch,
     "ui": step_ui,
+    "notion-full": step_notion_full,
 }
 
 
