@@ -69,8 +69,12 @@ def generate_cv_for_row(
         raise AIUnavailableError("AI brain cannot load prompts")
 
     cv = brain.ask_json(prompt)
-    name = pdf_render.safe_filename(cv.get("name", "CV"))
-    out = pdf_render.cv_output_path(name, company, config.CV_DIR)
+    out = pdf_render.cv_output_path(
+        company,
+        title,
+        config.CV_DIR,
+        full_name=str(cv.get("name") or "Natnael Eskinder Mengistu"),
+    )
     pdf_render.render_cv_pdf(cv, out)
     emit(f"[CV] Saved {out}")
 

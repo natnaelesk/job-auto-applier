@@ -1,6 +1,9 @@
-"""CV PDF renderer — reused cleanly from src/cv_generator.py (_render_pdf).
+"""CV + cover letter PDF renderers for Apply HQ.
 
-Output naming: output/cvs/CV_<Name>_<Company>.pdf
+CV layout: clean ATS Times style (job-pipeline writer), not the old
+gold/Helvetica shop look.
+
+Filename: output/cvs/NatnaelEskinder_{Company}_{Title}.pdf
 """
 from __future__ import annotations
 
@@ -8,132 +11,140 @@ import re
 from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_RIGHT
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.units import mm
+from reportlab.lib.units import inch
 from reportlab.platypus import (
     HRFlowable,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
-    Table,
-    TableStyle,
 )
 
-INK = colors.HexColor("#1b1b1f")
-ACCENT = colors.HexColor("#b8860b")
-GREY = colors.HexColor("#5a5a63")
-LINE = colors.HexColor("#d8d6cf")
+# ATS palette — navy/gray only (no gold)
+INK = colors.HexColor("#111111")
+NAVY = colors.HexColor("#1a1a2e")
+BODY = colors.HexColor("#333333")
+MUTED = colors.HexColor("#555555")
+RULE = colors.HexColor("#cccccc")
 
-S = {
-    "name": ParagraphStyle(
-        "name",
-        fontName="Helvetica-Bold",
-        fontSize=22,
-        textColor=INK,
-        leading=26,
-        spaceAfter=1.5 * mm,
-    ),
-    "role": ParagraphStyle(
-        "role",
-        fontName="Helvetica",
-        fontSize=10.5,
-        textColor=ACCENT,
-        spaceAfter=2 * mm,
-    ),
-    "contact": ParagraphStyle(
-        "contact",
-        fontName="Helvetica",
-        fontSize=8.5,
-        textColor=GREY,
-        spaceAfter=1 * mm,
-    ),
-    "section": ParagraphStyle(
-        "section",
-        fontName="Helvetica-Bold",
-        fontSize=9.5,
-        textColor=INK,
-        spaceBefore=4.5 * mm,
-        spaceAfter=1 * mm,
-    ),
-    "body": ParagraphStyle(
-        "body",
-        fontName="Helvetica",
-        fontSize=9.3,
-        textColor=INK,
-        leading=13,
-        spaceAfter=1 * mm,
-    ),
-    "bullet": ParagraphStyle(
-        "bullet",
-        fontName="Helvetica",
-        fontSize=9.2,
-        textColor=INK,
-        leading=12.5,
-        leftIndent=4.5 * mm,
-        bulletIndent=1 * mm,
-        spaceAfter=0.7 * mm,
-    ),
-    "job_head": ParagraphStyle(
-        "job_head",
-        fontName="Helvetica-Bold",
-        fontSize=10,
-        textColor=INK,
-        spaceBefore=1.6 * mm,
-    ),
-    "date": ParagraphStyle(
-        "date",
-        fontName="Helvetica",
-        fontSize=8.8,
-        textColor=GREY,
-        alignment=TA_RIGHT,
-    ),
-    "skill_label": ParagraphStyle(
-        "skill_label",
-        fontName="Helvetica-Bold",
-        fontSize=9,
-        textColor=INK,
-        leading=12.5,
-    ),
-    "skill_value": ParagraphStyle(
-        "skill_value",
-        fontName="Helvetica",
-        fontSize=9,
-        textColor=GREY,
-        leading=12.5,
-    ),
-}
+# Cover letter keeps a simple dark palette (unchanged intent)
+_CL_INK = colors.HexColor("#1b1b1f")
+_CL_GREY = colors.HexColor("#5a5a63")
+
+
+def _cv_styles() -> dict[str, ParagraphStyle]:
+    return {
+        "name": ParagraphStyle(
+            "ats_name",
+            fontName="Times-Bold",
+            fontSize=16,
+            textColor=INK,
+            alignment=TA_CENTER,
+            leading=18,
+            spaceAfter=2,
+        ),
+        "title": ParagraphStyle(
+            "ats_title",
+            fontName="Times-Roman",
+            fontSize=11,
+            textColor=BODY,
+            alignment=TA_CENTER,
+            leading=13,
+            spaceAfter=3,
+        ),
+        "contact": ParagraphStyle(
+            "ats_contact",
+            fontName="Times-Roman",
+            fontSize=9,
+            textColor=MUTED,
+            alignment=TA_CENTER,
+            leading=11,
+            spaceAfter=6,
+        ),
+        "section": ParagraphStyle(
+            "ats_section",
+            fontName="Times-Bold",
+            fontSize=10.5,
+            textColor=NAVY,
+            alignment=TA_LEFT,
+            leading=12,
+            spaceBefore=8,
+            spaceAfter=2,
+        ),
+        "body": ParagraphStyle(
+            "ats_body",
+            fontName="Times-Roman",
+            fontSize=9.5,
+            textColor=BODY,
+            alignment=TA_LEFT,
+            leading=12,
+            spaceAfter=3,
+        ),
+        "job_role": ParagraphStyle(
+            "ats_job_role",
+            fontName="Times-Bold",
+            fontSize=10,
+            textColor=INK,
+            alignment=TA_LEFT,
+            leading=12,
+            spaceBefore=4,
+            spaceAfter=0,
+        ),
+        "job_meta": ParagraphStyle(
+            "ats_job_meta",
+            fontName="Times-Italic",
+            fontSize=9,
+            textColor=MUTED,
+            alignment=TA_LEFT,
+            leading=11,
+            spaceAfter=2,
+        ),
+        "bullet": ParagraphStyle(
+            "ats_bullet",
+            fontName="Times-Roman",
+            fontSize=9.5,
+            textColor=BODY,
+            alignment=TA_LEFT,
+            leading=11.5,
+            leftIndent=12,
+            bulletIndent=0,
+            spaceAfter=1,
+        ),
+        "skill_line": ParagraphStyle(
+            "ats_skill_line",
+            fontName="Times-Roman",
+            fontSize=9.5,
+            textColor=BODY,
+            alignment=TA_LEFT,
+            leading=12,
+            spaceAfter=1,
+        ),
+        "skill_cat": ParagraphStyle(
+            "ats_skill_cat",
+            fontName="Times-Bold",
+            fontSize=9.5,
+            textColor=INK,
+            alignment=TA_LEFT,
+            leading=12,
+            spaceAfter=1,
+        ),
+    }
 
 
 def safe_filename(text: str) -> str:
     return re.sub(r"[^\w\-]+", "_", text or "unknown").strip("_")[:40]
 
 
-def _section(title: str) -> list:
-    return [
-        Paragraph(title.upper(), S["section"]),
-        HRFlowable(width="100%", thickness=0.7, color=LINE, spaceAfter=1.6 * mm),
-    ]
-
-
-def _head_row(left: str, right: str) -> Table:
-    t = Table(
-        [[Paragraph(left, S["job_head"]), Paragraph(right, S["date"])]],
-        colWidths=["72%", "28%"],
-    )
-    t.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 1),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-            ]
-        )
-    )
-    return t
+def ats_name_stem(full_name: str) -> str:
+    """'Natnael Eskinder Mengistu' -> 'NatnaelEskinder'."""
+    parts = re.findall(r"[A-Za-z]+", full_name or "")
+    if len(parts) >= 2:
+        return f"{parts[0]}{parts[1]}"
+    if parts:
+        return parts[0]
+    return "NatnaelEskinder"
 
 
 def _strip_dashes(obj):
@@ -146,135 +157,230 @@ def _strip_dashes(obj):
     return obj
 
 
+def _esc(text: str) -> str:
+    return (
+        (text or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _section_block(title: str, styles: dict) -> list:
+    """Uppercase section header + thin gray rule (never gold)."""
+    return [
+        Paragraph(title.upper(), styles["section"]),
+        HRFlowable(
+            width="100%",
+            thickness=0.6,
+            color=RULE,
+            spaceBefore=0,
+            spaceAfter=4,
+        ),
+    ]
+
+
 def render_cv_pdf(cv: dict, out_path: Path) -> None:
-    """Render tailored CV dict to a single-page PDF (same layout as src/cv_generator)."""
+    """Render tailored CV dict as a clean Times/ATS single-page PDF."""
     cv = _strip_dashes(cv)
+    styles = _cv_styles()
     out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # US Letter, tight margins (~0.5\")
+    margin = 0.5 * inch
     doc = SimpleDocTemplate(
         str(out_path),
-        pagesize=A4,
-        leftMargin=17 * mm,
-        rightMargin=17 * mm,
-        topMargin=14 * mm,
-        bottomMargin=13 * mm,
+        pagesize=letter,
+        leftMargin=margin,
+        rightMargin=margin,
+        topMargin=0.45 * inch,
+        bottomMargin=0.45 * inch,
     )
-    el = []
-    c = cv.get("contact", {})
+    el: list = []
+    c = cv.get("contact") or {}
 
-    el.append(Paragraph(cv.get("name", "").upper(), S["name"]))
-    el.append(Paragraph(cv.get("title", ""), S["role"]))
-    contact_bits = [x for x in (c.get("location"), c.get("email"), c.get("phone")) if x]
-    links = [x for x in (c.get("linkedin"), c.get("github"), c.get("website")) if x]
-    el.append(Paragraph("   |   ".join(contact_bits), S["contact"]))
-    if links:
-        el.append(Paragraph("   |   ".join(links), S["contact"]))
-    el.append(HRFlowable(width="100%", thickness=1.1, color=ACCENT, spaceBefore=1.5 * mm))
-
-    if cv.get("summary"):
-        el.extend(_section("Objective"))
-        el.append(Paragraph(cv["summary"], S["body"]))
-
-    if cv.get("experience"):
-        el.extend(_section("Work Experience"))
-        for exp in cv["experience"]:
-            el.append(
-                _head_row(
-                    f"{exp.get('role', '')} | {exp.get('company', '')}",
-                    exp.get("period", ""),
-                )
-            )
-            for b in exp.get("bullets", []):
-                el.append(Paragraph(b, S["bullet"], bulletText="•"))
-
-    if cv.get("skills"):
-        el.extend(_section("Skills"))
-        rows = [
-            [
-                Paragraph(g.get("category", ""), S["skill_label"]),
-                Paragraph(", ".join(g.get("items", [])), S["skill_value"]),
-            ]
-            for g in cv["skills"]
-        ]
-        t = Table(rows, colWidths=["24%", "76%"])
-        t.setStyle(
-            TableStyle(
-                [
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                    ("TOPPADDING", (0, 0), (-1, -1), 1),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-                ]
-            )
+    # ---- Centered header
+    el.append(Paragraph(_esc(cv.get("name", "")).upper(), styles["name"]))
+    if cv.get("title"):
+        el.append(Paragraph(_esc(cv["title"]), styles["title"]))
+    contact_bits = [
+        x
+        for x in (
+            c.get("location"),
+            c.get("email"),
+            c.get("phone"),
+            c.get("linkedin"),
+            c.get("github"),
+            c.get("website"),
         )
-        el.append(t)
+        if x
+    ]
+    if contact_bits:
+        el.append(
+            Paragraph("  |  ".join(_esc(x) for x in contact_bits), styles["contact"])
+        )
 
+    # ---- SUMMARY
+    if cv.get("summary"):
+        el.extend(_section_block("SUMMARY", styles))
+        el.append(Paragraph(_esc(cv["summary"]), styles["body"]))
+
+    # ---- SKILLS (category lines — not a gold table)
+    skills = cv.get("skills") or []
+    languages = cv.get("languages") or []
+    if skills or languages:
+        el.extend(_section_block("SKILLS", styles))
+        for g in skills:
+            if not isinstance(g, dict):
+                continue
+            cat = (g.get("category") or "").strip()
+            items = g.get("items") or []
+            if isinstance(items, list):
+                items_s = ", ".join(str(i) for i in items if i)
+            else:
+                items_s = str(items)
+            if not cat and not items_s:
+                continue
+            if cat:
+                el.append(
+                    Paragraph(
+                        f"<b>{_esc(cat)}:</b> {_esc(items_s)}",
+                        styles["skill_line"],
+                    )
+                )
+            else:
+                el.append(Paragraph(_esc(items_s), styles["skill_line"]))
+        if languages:
+            lang_s = ", ".join(str(x) for x in languages if x)
+            if lang_s:
+                el.append(
+                    Paragraph(
+                        f"<b>Languages:</b> {_esc(lang_s)}",
+                        styles["skill_line"],
+                    )
+                )
+
+    # ---- EXPERIENCE
+    if cv.get("experience"):
+        el.extend(_section_block("EXPERIENCE", styles))
+        for exp in cv["experience"]:
+            role = exp.get("role") or ""
+            company = exp.get("company") or ""
+            period = exp.get("period") or ""
+            location = exp.get("location") or ""
+            el.append(Paragraph(_esc(role), styles["job_role"]))
+            meta_parts = [x for x in (company, location, period) if x]
+            if meta_parts:
+                el.append(
+                    Paragraph(_esc(" | ".join(meta_parts)), styles["job_meta"])
+                )
+            for b in exp.get("bullets") or []:
+                text = str(b).strip()
+                if text:
+                    el.append(
+                        Paragraph(_esc(text), styles["bullet"], bulletText="•")
+                    )
+
+    # ---- PROJECTS
     if cv.get("projects"):
-        el.extend(_section("Projects"))
+        el.extend(_section_block("PROJECTS", styles))
         for p in cv["projects"]:
-            tech = ", ".join(p.get("tech", []))
-            el.append(Paragraph(f"<b>{p.get('name', '')}</b>", S["body"]))
-            el.append(
-                Paragraph(
-                    f"{p.get('description', '')}"
-                    + (f" <font color='#5a5a63' size='8'>[{tech}]</font>" if tech else ""),
-                    S["bullet"],
-                )
-            )
+            name = p.get("name") or ""
+            tech = p.get("tech") or []
+            tech_s = ", ".join(str(t) for t in tech if t) if isinstance(tech, list) else str(tech)
+            head = _esc(name)
+            if tech_s:
+                head = f"{head} — {_esc(tech_s)}"
+            el.append(Paragraph(f"<b>{head}</b>", styles["job_role"]))
+            desc = (p.get("description") or "").strip()
+            if desc:
+                el.append(Paragraph(_esc(desc), styles["body"]))
 
+    # ---- EDUCATION
     if cv.get("education"):
-        el.extend(_section("Education"))
+        el.extend(_section_block("EDUCATION", styles))
         for e in cv["education"]:
-            el.append(
-                _head_row(
-                    f"{e.get('degree', '')} | {e.get('school', '')}",
-                    e.get("period", "") or "",
+            degree = e.get("degree") or ""
+            school = e.get("school") or ""
+            period = e.get("period") or ""
+            el.append(Paragraph(_esc(degree), styles["job_role"]))
+            meta_parts = [x for x in (school, period) if x]
+            if meta_parts:
+                el.append(
+                    Paragraph(_esc(" | ".join(meta_parts)), styles["job_meta"])
                 )
-            )
             if e.get("detail"):
-                el.append(Paragraph(e["detail"], S["bullet"]))
+                el.append(Paragraph(_esc(str(e["detail"])), styles["body"]))
 
-    if cv.get("languages"):
-        el.extend(_section("Languages"))
-        el.append(Paragraph(", ".join(cv["languages"]), S["body"]))
+    # ---- CERTIFICATES (only if present — never invent)
+    certs = cv.get("certificates") or cv.get("certifications") or []
+    if certs:
+        el.extend(_section_block("CERTIFICATES", styles))
+        for cert in certs:
+            if isinstance(cert, dict):
+                label = cert.get("name") or cert.get("title") or ""
+                detail = cert.get("detail") or cert.get("issuer") or cert.get("period") or ""
+                line = _esc(label)
+                if detail:
+                    line = f"{line} — {_esc(str(detail))}"
+                if line:
+                    el.append(Paragraph(line, styles["body"]))
+            else:
+                text = str(cert).strip()
+                if text:
+                    el.append(Paragraph(_esc(text), styles["body"]))
 
     doc.build(el)
 
 
-def cv_output_path(name: str, company: str, cv_dir: Path) -> Path:
-    return cv_dir / f"CV_{safe_filename(name)}_{safe_filename(company)}.pdf"
+def cv_output_path(
+    company: str,
+    title: str,
+    cv_dir: Path,
+    *,
+    full_name: str = "Natnael Eskinder Mengistu",
+) -> Path:
+    """output/cvs/NatnaelEskinder_{Company}_{Title}.pdf"""
+    stem = ats_name_stem(full_name)
+    return (
+        cv_dir
+        / f"{safe_filename(stem)}_{safe_filename(company)}_{safe_filename(title)}.pdf"
+    )
 
 
-# --- Cover letter PDF (from src/cover_letter.py) ---
+# --- Cover letter PDF (unchanged simple layout) ---
 
 _CL = {
     "header": ParagraphStyle(
         "cl_header",
         fontName="Helvetica-Bold",
         fontSize=14,
-        textColor=INK,
-        spaceAfter=2 * mm,
+        textColor=_CL_INK,
+        spaceAfter=2,
     ),
     "meta": ParagraphStyle(
         "cl_meta",
         fontName="Helvetica",
         fontSize=9,
-        textColor=GREY,
+        textColor=_CL_GREY,
         leading=12,
-        spaceAfter=1 * mm,
+        spaceAfter=1,
     ),
     "body": ParagraphStyle(
         "cl_body",
         fontName="Helvetica",
         fontSize=10.5,
-        textColor=INK,
+        textColor=_CL_INK,
         leading=15,
-        spaceAfter=3 * mm,
+        spaceAfter=8,
     ),
 }
 
 
 def render_cover_pdf(data: dict, out_path: Path) -> None:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
         str(out_path),

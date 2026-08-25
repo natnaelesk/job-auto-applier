@@ -65,7 +65,9 @@ Do not invent columns. Do not use old Job Hunt lists.
 
 **Spark Projects** — same buttons / flow.
 
-CVs land at `../output/cvs/CV_<Name>_<Company>.pdf` (same naming as the existing generator).
+CVs land at `../output/cvs/NatnaelEskinder_{Company}_{Title}.pdf` using a clean
+Times/ATS layout (centered header, SUMMARY → SKILLS → EXPERIENCE → PROJECTS →
+EDUCATION → CERTIFICATES; no gold shop styling).
 
 ## Smoke test
 
