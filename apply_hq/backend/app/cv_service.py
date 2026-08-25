@@ -100,9 +100,20 @@ def build_cvs(
         rows = notion_store.list_needs_cv(board)[:limit]
 
     emit(f"[CV] {len(rows)} row(s) need a CV on {board}")
+    if not rows:
+        emit("[CV] Nothing to generate")
+        return {
+            "ok": True,
+            "reason": "nothing to build",
+            "done": 0,
+            "failed": 0,
+            "paths": [],
+        }
+
     done = 0
     failed = 0
     paths: list[str] = []
+    last_error = ""
     for row in rows:
         try:
             path = generate_cv_for_row(board, row, brain=brain, log=emit)
@@ -110,11 +121,39 @@ def build_cvs(
             done += 1
         except AIUnavailableError as e:
             emit(f"[CV] ! unavailable: {e}")
-            return {"ok": False, "reason": str(e), "done": done, "failed": failed + 1, "paths": paths}
+            return {
+                "ok": False,
+                "reason": str(e),
+                "done": done,
+                "failed": failed + 1,
+                "paths": paths,
+            }
         except Exception as e:
             failed += 1
+            last_error = str(e)
             emit(f"[CV] ! failed {row.get('name')}: {e}")
-    return {"ok": True, "reason": "ok", "done": done, "failed": failed, "paths": paths}
+
+    if done == 0 and failed > 0:
+        reason = last_error or f"{failed} CV(s) failed"
+        emit(f"[CV] ! all failed — {reason}")
+        return {
+            "ok": False,
+            "reason": reason,
+            "done": done,
+            "failed": failed,
+            "paths": paths,
+        }
+    if failed:
+        emit(f"[CV] Done — {done} ok, {failed} failed")
+    else:
+        emit(f"[CV] Done — {done}/{len(rows)} generated")
+    return {
+        "ok": True,
+        "reason": "ok",
+        "done": done,
+        "failed": failed,
+        "paths": paths,
+    }
 
 
 def generate_cover_letter(

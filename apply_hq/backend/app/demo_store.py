@@ -1,9 +1,12 @@
-"""In-memory demo fixtures when APPLY_HQ_DEMO=1 (or missing Notion token + DEMO).
+"""In-memory demo fixtures when APPLY_HQ_DEMO=1 AND no live Notion token.
 
 Never writes to Notion. Used for UI smoke / walkthrough only.
+
+CRITICAL: a live NOTION_TOKEN always wins — demo must not hide real Mik/Spark data.
 """
 from __future__ import annotations
 
+import os
 from copy import deepcopy
 from datetime import datetime, timezone
 
@@ -97,18 +100,28 @@ _store = {
 }
 
 
-def enabled() -> bool:
-    from . import config
-    import os
-
-    flag = os.getenv("APPLY_HQ_DEMO", "").strip().lower() in {"1", "true", "yes"}
-    return flag or (not config.NOTION_TOKEN and flag)
+def _flag_on() -> bool:
+    return os.getenv("APPLY_HQ_DEMO", "").strip().lower() in {"1", "true", "yes"}
 
 
 def force_enabled() -> bool:
-    import os
+    """True only when DEMO is requested AND there is no live Notion token.
 
-    return os.getenv("APPLY_HQ_DEMO", "").strip().lower() in {"1", "true", "yes"}
+    A configured NOTION_TOKEN always takes precedence — never serve Acme/Globex
+    fixtures over real Mik/Spark Ready rows.
+    """
+    from . import config
+
+    if (config.NOTION_TOKEN or "").strip():
+        return False
+    return _flag_on()
+
+
+def demo_flag_ignored_because_token() -> bool:
+    """True when user set APPLY_HQ_DEMO but a live token disabled it."""
+    from . import config
+
+    return _flag_on() and bool((config.NOTION_TOKEN or "").strip())
 
 
 def list_ready(board: str) -> list[dict]:

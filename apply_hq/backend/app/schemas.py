@@ -87,5 +87,6 @@ class HealthResponse(BaseModel):
     ai: bool
     ai_reason: str
     profile: bool
+    demo: bool = False
     mik_ds: str
     spark_ds: str

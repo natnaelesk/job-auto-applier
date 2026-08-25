@@ -8,7 +8,7 @@ Notion is the queue. You control every submit — no auto-apply, no Telegram, no
 ```bash
 cd apply_hq
 cp .env.example .env   # once — fill secrets
-python run.py
+python3 run.py
 ```
 
 Opens:
@@ -56,7 +56,10 @@ pip install -r requirements.txt pytest
 PYTHONPATH=. pytest backend/tests/test_property_mapping.py -q
 ```
 
-Optional UI-only demo (no Notion writes): set `APPLY_HQ_DEMO=1` then `python run.py`.
+Optional UI-only demo (no Notion writes): set `APPLY_HQ_DEMO=1` **and leave
+`NOTION_TOKEN` empty**, then `python3 run.py`. If a live token is present, demo
+is ignored and real Mik/Spark Ready rows are used. When demo is actually on,
+the UI shows **DEMO** in huge letters — it never silently pretends to be Notion.
 
 ## Layout
 

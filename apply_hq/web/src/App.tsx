@@ -91,15 +91,39 @@ function App() {
 
   const onBuildCv = () =>
     run(async () => {
-      await api.buildCv(board, selectedId || undefined)
-      await refreshQueue(board)
-      await refreshSession()
+      try {
+        const result = await api.buildCv(board, selectedId || undefined)
+        if (!result.ok) {
+          throw new Error(result.reason || 'Build CV failed')
+        }
+        if (result.failed > 0) {
+          setError(`Built ${result.done}, failed ${result.failed}`)
+        }
+      } finally {
+        // Always refetch queue (Has CV) + session after Build CV
+        await refreshQueue(board)
+        await refreshSession()
+      }
     })
 
   const current = session?.active && session.board === board ? session.current : null
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col px-4 py-5 sm:px-6">
+      {health?.demo && (
+        <div
+          className="mb-4 rounded-xl border-4 border-[var(--danger)] bg-red-50 px-4 py-3 text-center"
+          role="alert"
+        >
+          <div className="text-4xl font-black tracking-widest text-[var(--danger)] sm:text-5xl">
+            DEMO
+          </div>
+          <p className="mt-1 text-sm font-semibold text-[var(--danger)]">
+            In-memory fixtures — not live Notion. Remove APPLY_HQ_DEMO or set NOTION_TOKEN.
+          </p>
+        </div>
+      )}
+
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold tracking-[0.18em] text-[var(--ink-dim)] uppercase">
@@ -112,7 +136,13 @@ function App() {
         <div className="mono text-right text-[11px] text-[var(--ink-dim)]">
           {health ? (
             <>
-              <div>Notion {health.notion ? 'ok' : 'missing token'}</div>
+              <div>
+                {health.demo ? (
+                  <span className="font-bold text-[var(--danger)]">DEMO</span>
+                ) : (
+                  <>Notion {health.notion ? 'ok' : 'missing token'}</>
+                )}
+              </div>
               <div title={health.ai_reason}>
                 AI {health.ai ? 'ready' : 'stub'} · profile {health.profile ? 'ok' : 'missing'}
               </div>
@@ -280,7 +310,18 @@ function ApplyFront({
           onClick={() =>
             run(async () => {
               const r = await api.openLink()
-              if (r.url) await copyText(r.url)
+              if (r.url) {
+                try {
+                  await copyText(r.url)
+                } catch (e) {
+                  // Still show URL in error if copy failed
+                  throw new Error(
+                    `Link: ${r.url} (copy failed: ${e instanceof Error ? e.message : String(e)})`,
+                  )
+                }
+              } else {
+                throw new Error(r.error || 'No apply link')
+              }
             })
           }
         >

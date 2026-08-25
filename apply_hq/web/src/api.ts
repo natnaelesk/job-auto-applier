@@ -48,8 +48,17 @@ export type Health = {
   ai: boolean
   ai_reason: string
   profile: boolean
+  demo: boolean
   mik_ds: string
   spark_ds: string
+}
+
+export type BuildCvResult = {
+  ok: boolean
+  reason?: string
+  done: number
+  failed: number
+  paths: string[]
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -57,17 +66,36 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
   })
+  let body: unknown = null
+  try {
+    body = await res.json()
+  } catch {
+    body = null
+  }
   if (!res.ok) {
-    let detail = res.statusText
-    try {
-      const body = await res.json()
-      detail = body.detail || JSON.stringify(body)
-    } catch {
-      /* ignore */
-    }
+    const detail =
+      body && typeof body === 'object' && body !== null && 'detail' in body
+        ? (body as { detail: unknown }).detail
+        : res.statusText
     throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
   }
-  return res.json() as Promise<T>
+  // Never swallow a 200 with ok:false
+  if (
+    body &&
+    typeof body === 'object' &&
+    body !== null &&
+    'ok' in body &&
+    (body as { ok: unknown }).ok === false
+  ) {
+    const reason =
+      'reason' in body && typeof (body as { reason: unknown }).reason === 'string'
+        ? (body as { reason: string }).reason
+        : 'error' in body && typeof (body as { error: unknown }).error === 'string'
+          ? (body as { error: string }).error
+          : 'Request failed (ok:false)'
+    throw new Error(reason)
+  }
+  return body as T
 }
 
 export const api = {
@@ -85,9 +113,10 @@ export const api = {
   toggleCover: () =>
     req<SessionState>('/api/session/toggle-cover', { method: 'POST' }),
   openLink: () =>
-    req<{ ok: boolean; url: string | null }>('/api/session/open-link', {
-      method: 'POST',
-    }),
+    req<{ ok: boolean; url: string | null; error?: string | null }>(
+      '/api/session/open-link',
+      { method: 'POST' },
+    ),
   mark: (board: Board, page_id: string, status: 'Applied' | 'Closed' | 'Later', notes?: string) =>
     req<{ ok: boolean; session: SessionState }>('/api/mark', {
       method: 'POST',
@@ -99,7 +128,7 @@ export const api = {
       body: JSON.stringify({ board, page_id, user_note }),
     }),
   buildCv: (board: Board, page_id?: string) =>
-    req<{ ok: boolean; done: number; failed: number; paths: string[] }>('/api/build-cv', {
+    req<BuildCvResult>('/api/build-cv', {
       method: 'POST',
       body: JSON.stringify({ board, page_id: page_id || null, limit: 20 }),
     }),
@@ -109,5 +138,20 @@ export const api = {
 }
 
 export async function copyText(text: string) {
-  await navigator.clipboard.writeText(text)
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // Fallback for non-secure contexts / denied clipboard
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    try {
+      document.execCommand('copy')
+    } finally {
+      document.body.removeChild(ta)
+    }
+  }
 }

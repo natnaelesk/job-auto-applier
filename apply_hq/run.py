@@ -4,7 +4,7 @@ Dev: starts FastAPI + Vite together.
 Prod-ish: builds web once, then serves API + static from one process.
 
 Usage (from apply_hq/):
-  python run.py
+  python3 run.py
 """
 from __future__ import annotations
 

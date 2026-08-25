@@ -1,11 +1,13 @@
 """In-memory apply session + ring log for the UI."""
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import threading
 import webbrowser
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any
 
 from . import notion_store
 from .mapping import Board
@@ -37,6 +39,28 @@ class LogBus:
 logs = LogBus()
 
 
+def _open_system_url(url: str) -> None:
+    """Open URL without crashing the server process (Windows-safe).
+
+    webbrowser.open / closed sockets must not take down uvicorn.
+    """
+    if sys.platform == "win32":
+        try:
+            os.startfile(url)  # type: ignore[attr-defined]
+            return
+        except OSError:
+            # Empty title after `start` so `&` in URLs is not a title
+            subprocess.Popen(
+                ["cmd", "/c", "start", "", url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            return
+    if not webbrowser.open(url, new=2):
+        raise RuntimeError(f"Could not open browser for {url}")
+
+
 class ApplySession:
     """Human-controlled apply loop. No auto-submit."""
 
@@ -51,7 +75,6 @@ class ApplySession:
     def start(self, board: Board, page_id: str | None = None) -> dict:
         with self._lock:
             rows = notion_store.list_ready(board)
-            # Prefer rows that already have a CV for applying; still show all Ready
             self.board = board
             self.queue = rows
             self.active = True
@@ -93,7 +116,11 @@ class ApplySession:
             if not self.board or not self.queue:
                 return None
             page_id = self.queue[self.index]["page_id"]
-            row = notion_store.get_page(self.board, page_id)
+            try:
+                row = notion_store.get_page(self.board, page_id)
+            except Exception as e:
+                logs.emit(f"[Apply] ! refresh failed: {e}", "error")
+                return self.queue[self.index]
             self.queue[self.index] = row
             return row
 
@@ -118,20 +145,28 @@ class ApplySession:
             return self.state()
 
     def open_link(self) -> dict:
-        cur = self.current()
-        if not cur:
-            logs.emit("[Apply] No current row", "error")
-            return {"ok": False, "url": None}
-        link = (cur.get("apply_link") or "").strip()
-        if not link:
-            logs.emit("[Apply] No Apply link on this row", "error")
-            return {"ok": False, "url": None}
+        """Return URL for the UI to copy; open best-effort. Never crash."""
         try:
-            webbrowser.open(link, new=2)
-            logs.emit(f"[Apply] Opened {link}")
+            cur = self.current()
+            if not cur:
+                logs.emit("[Apply] No current row", "error")
+                return {"ok": False, "url": None, "error": "No current row"}
+            link = (cur.get("apply_link") or "").strip()
+            if not link:
+                logs.emit("[Apply] No Apply link on this row", "error")
+                return {"ok": False, "url": None, "error": "No Apply link"}
+            try:
+                _open_system_url(link)
+                logs.emit(f"[Apply] Opened {link}")
+            except Exception as e:
+                # Still return URL so the UI can copy it
+                logs.emit(
+                    f"[Apply] Open failed ({e}) — copy the link instead", "warn"
+                )
+            return {"ok": True, "url": link, "error": None}
         except Exception as e:
-            logs.emit(f"[Apply] Open failed ({e}) — copy the link instead", "warn")
-        return {"ok": True, "url": link}
+            logs.emit(f"[Apply] ! open-link crashed (contained): {e}", "error")
+            return {"ok": False, "url": None, "error": str(e)}
 
 
 session = ApplySession()
