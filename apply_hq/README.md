@@ -56,6 +56,8 @@ pip install -r requirements.txt pytest
 PYTHONPATH=. pytest backend/tests/test_property_mapping.py -q
 ```
 
+Optional UI-only demo (no Notion writes): set `APPLY_HQ_DEMO=1` then `python run.py`.
+
 ## Layout
 
 ```

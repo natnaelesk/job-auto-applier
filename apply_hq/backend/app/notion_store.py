@@ -1,14 +1,15 @@
 """Notion data-source client for Mik Jobs + Spark Projects.
 
 Uses locked data source IDs. Never invents columns.
+Set APPLY_HQ_DEMO=1 for in-memory fixtures (no Notion writes).
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from notion_client import Client
 
-from . import config
+from . import config, demo_store
 from .mapping import (
     Board,
     build_cover_update,
@@ -67,17 +68,23 @@ def query_pages(
 
 def list_ready(board: Board) -> list[dict]:
     """Queue = Status Ready."""
+    if demo_store.force_enabled():
+        return demo_store.list_ready(board)
     pages = query_pages(board, filter_obj=queue_filter())
     return [parse_page(board, p) for p in pages]
 
 
 def list_needs_cv(board: Board) -> list[dict]:
     """Build CV = Has CV unchecked."""
+    if demo_store.force_enabled():
+        return demo_store.list_needs_cv(board)
     pages = query_pages(board, filter_obj=needs_cv_filter())
     return [parse_page(board, p) for p in pages]
 
 
 def get_page(board: Board, page_id: str) -> dict:
+    if demo_store.force_enabled():
+        return demo_store.get_page(board, page_id)
     notion = _client()
     page = notion.pages.retrieve(page_id=page_id)
     return parse_page(board, page)
@@ -96,6 +103,10 @@ def mark_status(
     notes: str | None = None,
     cover_letter: str | None = None,
 ) -> dict:
+    # Validate against locked action statuses even in demo
+    build_status_update(board, status, notes=notes, cover_letter=cover_letter)
+    if demo_store.force_enabled():
+        return demo_store.mark_status(board, page_id, status, notes=notes)
     props = build_status_update(
         board, status, notes=notes, cover_letter=cover_letter
     )
@@ -104,14 +115,20 @@ def mark_status(
 
 
 def write_cv(board: Board, page_id: str, cv_path: str) -> dict:
+    if demo_store.force_enabled():
+        return demo_store.write_cv(board, page_id, cv_path)
     update_properties(page_id, build_cv_update(board, cv_path))
     return get_page(board, page_id)
 
 
 def write_cover(board: Board, page_id: str, cover_path: str) -> dict:
+    if demo_store.force_enabled():
+        return demo_store.write_cover(board, page_id, cover_path)
     update_properties(page_id, build_cover_update(board, cover_path))
     return get_page(board, page_id)
 
 
 def notion_configured() -> bool:
+    if demo_store.force_enabled():
+        return True
     return bool(config.NOTION_TOKEN and data_source_id("mik") and data_source_id("spark"))

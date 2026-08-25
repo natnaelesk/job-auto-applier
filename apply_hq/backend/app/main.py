@@ -43,8 +43,12 @@ app.add_middleware(
 
 @app.get("/api/health", response_model=HealthResponse)
 def health():
+    from backend.app import demo_store
+
     brain = get_brain()
     ai_ok, ai_reason = brain.available()
+    if demo_store.force_enabled():
+        ai_reason = f"DEMO mode — {ai_reason}"
     return HealthResponse(
         ok=True,
         notion=notion_store.notion_configured(),
