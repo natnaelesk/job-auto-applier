@@ -1,11 +1,19 @@
 """AI brain interface — Cursor SDK when available, stub otherwise.
 
 Never fake success. Callers must handle AIUnavailableError.
+
+Includes the Windows cursor-sdk bridge patch (WinError 10038): cursor-sdk
+uses select() on a pipe for discovery, which only works on sockets on Windows.
+Same fix as src/ai.py.
 """
 from __future__ import annotations
 
 import json
+import queue
 import re
+import sys
+import threading
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -13,6 +21,58 @@ from typing import Any
 
 class AIUnavailableError(RuntimeError):
     """Raised when CURSOR_API_KEY / profile / SDK is missing or broken."""
+
+
+def _patch_bridge_for_windows() -> None:
+    """cursor-sdk uses select() on a pipe for bridge discovery — WinError 10038
+    on Windows. Replace with a threaded blocking-read discovery reader."""
+    if sys.platform != "win32":
+        return
+    try:
+        from cursor_sdk import _bridge
+        from cursor_sdk.errors import CursorSDKError
+    except Exception:
+        return
+
+    def _read_discovery_win(process, timeout):
+        if process.stderr is None:
+            raise CursorSDKError("Bridge process stderr is unavailable")
+
+        lines_q: queue.Queue = queue.Queue()
+
+        def reader():
+            try:
+                for line in process.stderr:
+                    lines_q.put(line)
+            except Exception:
+                pass
+            lines_q.put(None)
+
+        threading.Thread(target=reader, daemon=True).start()
+
+        deadline = time.monotonic() + timeout
+        seen: list[str] = []
+        while time.monotonic() < deadline:
+            try:
+                line = lines_q.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            if line is None:
+                code = process.poll()
+                raise CursorSDKError(
+                    f"Bridge exited before discovery with status {code}: "
+                    + "".join(seen)
+                )
+            seen.append(line)
+            discovery = _bridge.parse_discovery_line(line)
+            if discovery is not None:
+                return discovery
+        raise CursorSDKError("Timed out waiting for bridge discovery")
+
+    _bridge._read_discovery = _read_discovery_win
+
+
+_patch_bridge_for_windows()
 
 
 class AIBrain(ABC):
@@ -48,6 +108,7 @@ class CursorAIBrain(AIBrain):
         self.prompts_dir = prompts_dir
         self._err: str | None = None
         try:
+            _patch_bridge_for_windows()
             from cursor_sdk import Agent, AgentOptions, LocalAgentOptions  # noqa: F401
         except Exception as e:
             self._err = f"cursor-sdk not importable: {e}"
@@ -63,6 +124,8 @@ class CursorAIBrain(AIBrain):
         ok, reason = self.available()
         if not ok:
             raise AIUnavailableError(reason)
+        # Re-apply patch in case SDK was imported before our module on Windows
+        _patch_bridge_for_windows()
         from cursor_sdk import Agent, AgentOptions, LocalAgentOptions
 
         result = Agent.prompt(

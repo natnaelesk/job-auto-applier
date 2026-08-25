@@ -1,7 +1,7 @@
 """Notion data-source client for Mik Jobs + Spark Projects.
 
 Uses locked data source IDs. Never invents columns.
-Set APPLY_HQ_DEMO=1 for in-memory fixtures (no Notion writes).
+Demo fixtures only when APPLY_HQ_DEMO=1 AND no NOTION_TOKEN.
 """
 from __future__ import annotations
 
@@ -33,7 +33,6 @@ def data_source_id(board: Board) -> str:
         ds = config.NOTION_MIK_DATA_SOURCE_ID
     else:
         ds = config.NOTION_SPARK_DATA_SOURCE_ID
-    # Accept collection://uuid form
     if ds.startswith("collection://"):
         ds = ds.split("://", 1)[1]
     return ds.strip()
@@ -67,7 +66,7 @@ def query_pages(
 
 
 def list_ready(board: Board) -> list[dict]:
-    """Queue = Status Ready."""
+    """Queue = Status Ready. Live Notion when token present."""
     if demo_store.force_enabled():
         return demo_store.list_ready(board)
     pages = query_pages(board, filter_obj=queue_filter())
@@ -91,6 +90,8 @@ def get_page(board: Board, page_id: str) -> dict:
 
 
 def update_properties(page_id: str, properties: dict) -> None:
+    if demo_store.force_enabled():
+        raise RuntimeError("Demo mode — refusing Notion write")
     notion = _client()
     notion.pages.update(page_id=page_id, properties=properties)
 
@@ -103,7 +104,6 @@ def mark_status(
     notes: str | None = None,
     cover_letter: str | None = None,
 ) -> dict:
-    # Validate against locked action statuses even in demo
     build_status_update(board, status, notes=notes, cover_letter=cover_letter)
     if demo_store.force_enabled():
         return demo_store.mark_status(board, page_id, status, notes=notes)
@@ -129,6 +129,9 @@ def write_cover(board: Board, page_id: str, cover_path: str) -> dict:
 
 
 def notion_configured() -> bool:
-    if demo_store.force_enabled():
-        return True
-    return bool(config.NOTION_TOKEN and data_source_id("mik") and data_source_id("spark"))
+    """True only when a live NOTION_TOKEN is set — never lied about by demo."""
+    return bool(
+        config.live_notion_token()
+        and data_source_id("mik")
+        and data_source_id("spark")
+    )

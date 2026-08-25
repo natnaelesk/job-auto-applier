@@ -47,14 +47,18 @@ def health():
 
     brain = get_brain()
     ai_ok, ai_reason = brain.available()
-    if demo_store.force_enabled():
+    demo = demo_store.force_enabled()
+    if demo:
         ai_reason = f"DEMO mode — {ai_reason}"
+    elif demo_store.demo_flag_ignored_because_token():
+        ai_reason = f"{ai_reason} (APPLY_HQ_DEMO ignored — live NOTION_TOKEN wins)"
     return HealthResponse(
         ok=True,
         notion=notion_store.notion_configured(),
         ai=ai_ok,
         ai_reason=ai_reason,
         profile=config.profile_ready(),
+        demo=demo,
         mik_ds=config.NOTION_MIK_DATA_SOURCE_ID,
         spark_ds=config.NOTION_SPARK_DATA_SOURCE_ID,
     )
@@ -69,7 +73,10 @@ def get_queue(board: str):
     except Exception as e:
         logs.emit(f"[Queue] ! {e}", "error")
         raise HTTPException(502, f"Notion query failed: {e}") from e
-    logs.emit(f"[Queue] {board}: {len(items)} Ready")
+    from backend.app import demo_store
+
+    mode = "DEMO" if demo_store.force_enabled() else "Notion"
+    logs.emit(f"[Queue] {board}: {len(items)} Ready ({mode})")
     return QueueResponse(board=board, items=items, count=len(items))  # type: ignore[arg-type]
 
 
@@ -86,7 +93,11 @@ def get_needs_cv(board: str):
 
 @app.get("/api/session", response_model=SessionState)
 def get_session():
-    return session.state()
+    try:
+        return session.state()
+    except Exception as e:
+        logs.emit(f"[Apply] ! session GET failed: {e}", "error")
+        raise HTTPException(500, str(e)) from e
 
 
 @app.post("/api/session/start", response_model=SessionState)
@@ -100,22 +111,39 @@ def start_session(body: StartRequest):
 
 @app.post("/api/session/stop", response_model=SessionState)
 def stop_session():
-    return session.stop()
+    try:
+        return session.stop()
+    except Exception as e:
+        logs.emit(f"[Apply] ! stop failed: {e}", "error")
+        raise HTTPException(500, str(e)) from e
 
 
 @app.post("/api/session/next", response_model=SessionState)
 def next_job():
-    return session.next_job()
+    try:
+        return session.next_job()
+    except Exception as e:
+        logs.emit(f"[Apply] ! next failed: {e}", "error")
+        raise HTTPException(500, str(e)) from e
 
 
 @app.post("/api/session/toggle-cover", response_model=SessionState)
 def toggle_cover():
-    return session.toggle_cover()
+    try:
+        return session.toggle_cover()
+    except Exception as e:
+        logs.emit(f"[Apply] ! toggle-cover failed: {e}", "error")
+        raise HTTPException(500, str(e)) from e
 
 
 @app.post("/api/session/open-link")
 def open_link():
-    return session.open_link()
+    """Open/copy apply link. Never crash the process — always return JSON."""
+    try:
+        return session.open_link()
+    except Exception as e:
+        logs.emit(f"[Apply] ! open-link endpoint: {e}", "error")
+        return {"ok": False, "url": None, "error": str(e)}
 
 
 @app.post("/api/mark")
@@ -125,10 +153,12 @@ def mark(body: MarkRequest):
             body.board, body.page_id, body.status, notes=body.notes
         )
         logs.emit(f"[Mark] {body.status} → {row.get('name')}")
-        # Advance session if this was the current row
         cur = session.current()
         if cur and cur.get("page_id") == body.page_id:
-            session.next_job()
+            try:
+                session.next_job()
+            except Exception as e:
+                logs.emit(f"[Apply] ! advance after mark: {e}", "warn")
         return {"ok": True, "row": row, "session": session.state()}
     except Exception as e:
         logs.emit(f"[Mark] ! {e}", "error")
@@ -156,11 +186,16 @@ def cover_letter(body: CoverRequest):
 
 @app.post("/api/build-cv")
 def build_cv(body: BuildCvRequest):
-    result = cv_service.build_cvs(
-        body.board, page_id=body.page_id, limit=body.limit, log=logs.emit
-    )
+    try:
+        result = cv_service.build_cvs(
+            body.board, page_id=body.page_id, limit=body.limit, log=logs.emit
+        )
+    except Exception as e:
+        logs.emit(f"[CV] ! build crashed (contained): {e}", "error")
+        raise HTTPException(502, str(e)) from e
     if not result.get("ok"):
-        raise HTTPException(503, result.get("reason") or "CV build unavailable")
+        # Hard error — never return 200 with ok:false
+        raise HTTPException(503, result.get("reason") or "CV build failed")
     return result
 
 
