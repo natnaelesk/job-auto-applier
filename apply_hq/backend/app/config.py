@@ -1,21 +1,64 @@
-"""Apply HQ configuration — loads .env from apply_hq/ then repo root."""
+"""Apply HQ configuration — merges apply_hq/.env and repo-root .env.
+
+A live NOTION_TOKEN from either file always wins. Empty placeholders in
+apply_hq/.env must not wipe secrets from the parent .env (the Windows
+failure mode: APPLY_HQ_DEMO=1 locally + token only in repo-root .env).
+"""
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 APPLY_HQ_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = APPLY_HQ_ROOT.parent
 
-# Prefer apply_hq/.env, fall back to repo-root .env
-load_dotenv(APPLY_HQ_ROOT / ".env")
-load_dotenv(REPO_ROOT / ".env")
+
+def _clean_env_value(raw: str | None) -> str | None:
+    """Return stripped value, or None if missing/comment-only/empty placeholder."""
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value or value.startswith("#"):
+        return None
+    return value.split(" #")[0].strip() or None
+
+
+def _load_merged_dotenv() -> None:
+    """Merge repo-root .env then apply_hq/.env.
+
+    Rules:
+    - Non-empty values from apply_hq/.env override parent.
+    - Empty / missing keys in apply_hq/.env do NOT erase parent secrets.
+    - Already-set non-empty process env vars are left alone.
+    """
+    merged: dict[str, str] = {}
+    for path in (REPO_ROOT / ".env", APPLY_HQ_ROOT / ".env"):
+        if not path.is_file():
+            continue
+        for key, raw in (dotenv_values(path) or {}).items():
+            cleaned = _clean_env_value(raw)
+            if cleaned is None:
+                # Empty placeholder — keep any value already merged from parent
+                continue
+            merged[key] = cleaned
+
+    for key, value in merged.items():
+        existing = os.environ.get(key)
+        if existing is not None and existing.strip():
+            continue
+        os.environ[key] = value
+
+
+_load_merged_dotenv()
 
 
 def _env(name: str, default: str = "") -> str:
-    value = os.getenv(name, default).strip()
+    value = os.getenv(name, default)
+    if value is None:
+        return default
+    value = value.strip()
     if value.startswith("#"):
         return default
     return value.split(" #")[0].strip()
@@ -65,10 +108,15 @@ def profile_ready() -> bool:
 def ai_ready() -> tuple[bool, str]:
     """Return (ok, reason). Never fake success when unavailable."""
     if not CURSOR_API_KEY:
-        return False, "CURSOR_API_KEY missing — set it in apply_hq/.env"
+        return False, "CURSOR_API_KEY missing — set it in apply_hq/.env or repo-root .env"
     if not profile_ready():
         return False, (
             f"Profile missing — copy profile/master_cv.example.md to "
             f"{PROFILE_DIR / 'master_cv.md'}"
         )
     return True, "ok"
+
+
+def live_notion_token() -> str:
+    """Non-empty NOTION_TOKEN from process env / merged .env files."""
+    return (NOTION_TOKEN or "").strip()

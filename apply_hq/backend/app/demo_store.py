@@ -107,12 +107,12 @@ def _flag_on() -> bool:
 def force_enabled() -> bool:
     """True only when DEMO is requested AND there is no live Notion token.
 
-    A configured NOTION_TOKEN always takes precedence — never serve Acme/Globex
-    fixtures over real Mik/Spark Ready rows.
+    A NOTION_TOKEN from apply_hq/.env OR the parent repo .env always wins —
+    never serve Acme/Globex fixtures over real Mik/Spark Ready rows.
     """
     from . import config
 
-    if (config.NOTION_TOKEN or "").strip():
+    if config.live_notion_token():
         return False
     return _flag_on()
 
@@ -121,7 +121,7 @@ def demo_flag_ignored_because_token() -> bool:
     """True when user set APPLY_HQ_DEMO but a live token disabled it."""
     from . import config
 
-    return _flag_on() and bool((config.NOTION_TOKEN or "").strip())
+    return _flag_on() and bool(config.live_notion_token())
 
 
 def list_ready(board: str) -> list[dict]:

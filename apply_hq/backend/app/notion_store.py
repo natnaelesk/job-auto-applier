@@ -131,7 +131,7 @@ def write_cover(board: Board, page_id: str, cover_path: str) -> dict:
 def notion_configured() -> bool:
     """True only when a live NOTION_TOKEN is set — never lied about by demo."""
     return bool(
-        (config.NOTION_TOKEN or "").strip()
+        config.live_notion_token()
         and data_source_id("mik")
         and data_source_id("spark")
     )
