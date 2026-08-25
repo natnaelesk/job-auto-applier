@@ -30,6 +30,9 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+apply_hq/web/node_modules/
+apply_hq/web/dist/
+apply_hq/.env
 browser_profile*/
 *.db
 
