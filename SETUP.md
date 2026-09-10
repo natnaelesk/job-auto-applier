@@ -39,8 +39,12 @@ copy profile\master_cv.example.md profile\master_cv.md
 copy profile\answers.example.md profile\answers.md
 ```
 
-Edit those three files with **your** name, skills, experience, and target roles  
+Edit those three files with **your** name, skills, experience, and target rules  
 (e.g. medical / health jobs for a non-dev profile). The AI only uses facts you put there.
+Put real `about_me.md` locally only — never commit secrets or a filled about file.
+
+**CV quality** = local profile + [`prompts/cv_writing_skill.md`](prompts/cv_writing_skill.md)
+(ATS structure, role-flavor reordering, anti-hallucination). Personal about stays gitignored.
 
 Optional docs (degree PDF, etc.): see `profile/docs/README.example.md`.
 
@@ -120,9 +124,10 @@ Use a **separate** Notion database per person. Do not share one tracker.
 ## Security checklist
 
 - [ ] `.env` is never committed  
-- [ ] `profile/about_me.md`, `master_cv.md`, `answers.md` are yours only  
+- [ ] `profile/about_me.md`, `master_cv.md`, `answers.md` are yours only (never commit)  
 - [ ] No shared Cursor / Telegram / Notion / Gmail between two people  
 - [ ] `data/` and `output/` stay on this machine  
+- [ ] CV prompts use `prompts/cv_writing_skill.md` + your local profile — not someone else's bio
 
 ## Troubleshooting
 

@@ -47,6 +47,8 @@ Or: `scripts\launch_ui.bat`
 
 Each person who clones must create **their own** credentials and profile.
 
+**CV quality** = your local `profile/*.md` + [`prompts/cv_writing_skill.md`](prompts/cv_writing_skill.md). Personal `about_me.md` / `master_cv.md` / `answers.md` stay gitignored; only `*.example.md` templates are in the repo.
+
 ---
 
 ## App tabs
