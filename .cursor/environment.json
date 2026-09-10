@@ -1,0 +1,4 @@
+{
+  "name": "Job Auto-Applier",
+  "install": "python3 -m venv .venv\n.venv/bin/python -m pip install --upgrade pip\n.venv/bin/pip install -r requirements.txt\n.venv/bin/pip install -r apply_hq/requirements.txt\ncd apply_hq/web && npm ci"
+}

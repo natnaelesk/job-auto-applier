@@ -3,12 +3,21 @@
 Human-driven desktop apply surface for **Mik** (employment) and **Spark** (freelance).
 Notion is the queue. You control every submit — no auto-apply, no Telegram, no hunt UI.
 
+**Secrets map:** [../ENV.md](../ENV.md) · **Full install:** [../SETUP.md](../SETUP.md)
+
 ## One command
+
+Needs **Python 3.11+** and **Node.js 20+** (npm). From a fresh clone you can also run:
+
+```bash
+# Linux — from repo root
+bash scripts/setup_fresh.sh --with-apply-hq
+```
 
 ```bash
 cd apply_hq
-cp .env.example .env   # once — fill secrets
-python3 run.py
+cp .env.example .env   # once — fill secrets (or reuse repo-root .env)
+python3 run.py         # or: ../.venv/bin/python run.py
 ```
 
 Opens:
@@ -16,14 +25,18 @@ Opens:
 - UI: http://127.0.0.1:5173
 - API: http://127.0.0.1:8787
 
+The Vite frontend has **no** separate `.env` — it proxies `/api` to FastAPI. All secrets are backend-side.
+
 ## Secrets (`.env`)
 
 | Key | Purpose |
 |-----|---------|
 | `NOTION_TOKEN` | Notion integration token (apply_hq/.env **or** repo-root `.env`) |
 | `CURSOR_API_KEY` | Cursor SDK for CV / cover letter |
-| `NOTION_MIK_DATA_SOURCE_ID` | `c7753833-38f9-4885-958f-547e6129a566` |
-| `NOTION_SPARK_DATA_SOURCE_ID` | `d6129604-e8be-4995-93db-a7f1b0a07652` |
+| `CURSOR_MODEL` | Optional (default `composer-2.5`) |
+| `NOTION_MIK_DATA_SOURCE_ID` | Default Mik collection — replace with **your** data source UUID for a personal tracker |
+| `NOTION_SPARK_DATA_SOURCE_ID` | Default Spark collection — replace with **your** data source UUID for a personal tracker |
+| `APPLY_HQ_HOST` / `APPLY_HQ_PORT` / `APPLY_HQ_VITE_PORT` | Optional bind defaults (`127.0.0.1` / `8787` / `5173`) |
 
 Apply HQ merges **both** `apply_hq/.env` and the parent repo `.env`. Non-empty
 values in `apply_hq/.env` win; empty placeholders do **not** erase parent
