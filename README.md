@@ -9,14 +9,33 @@ AI-assisted job pipeline you run locally:
 5. **Apply tab (you drive):** open links, screenshot → AI answers, mark Applied / Closed
 6. Scan Gmail for replies (optional)
 
-Stack: Python, Telethon, Cursor SDK, Playwright, Notion API, Gmail API, CustomTkinter.
+Stack: Python, Telethon, Cursor SDK, Playwright, Notion API, Gmail API, CustomTkinter.  
+Also: **[Apply HQ](apply_hq/README.md)** — Notion queue UI (Vite + FastAPI).
 
 **Architecture notes:** [PLAN.md](PLAN.md)  
-**Install from a fresh clone:** **[SETUP.md](SETUP.md)** ← start here
+**Install from a fresh clone:** **[SETUP.md](SETUP.md)** ← start here  
+**Env vars / secrets map:** **[ENV.md](ENV.md)**
 
 ---
 
-## Quick start (Windows)
+## Quick start
+
+### Linux (Omarchy / Arch / Debian / Ubuntu)
+
+```bash
+git clone https://github.com/natnaelesk/job-auto-applier.git
+cd job-auto-applier
+bash scripts/setup_fresh.sh
+```
+
+Then:
+
+1. Edit `.env` — Telegram API + `CURSOR_API_KEY` ([ENV.md](ENV.md))
+2. Edit `profile/about_me.md`, `master_cv.md`, `answers.md`
+3. `source .venv/bin/activate && python src/main.py scan`  (Telegram login once)
+4. `python src/main.py ui`  (or `bash scripts/launch_ui.sh`)
+
+### Windows
 
 ```powershell
 git clone https://github.com/natnaelesk/job-auto-applier.git
@@ -39,7 +58,7 @@ Or: `scripts\launch_ui.bat`
 
 | In the repo (safe to clone) | Local only (never committed) |
 |-----------------------------|------------------------------|
-| Source code, prompts, UI | `.env` (API keys) |
+| Source code, prompts, UI | `.env` / `apply_hq/.env` (API keys) |
 | `profile/*.example.md` templates | `profile/about_me.md`, `master_cv.md`, `answers.md` |
 | `.env.example` | `credentials.json`, `token.json` |
 | Setup scripts | `data/` (DB, Telegram session) |
@@ -63,7 +82,17 @@ Each person who clones must create **their own** credentials and profile.
 
 ## Useful commands
 
+```bash
+# Linux (venv activated)
+python src/main.py ui
+python src/main.py scan extract match cv notion
+python src/main.py search-foreign
+python src/main.py gmail
+python src/main.py notion-full
+```
+
 ```powershell
+# Windows
 .\.venv\Scripts\python.exe src\main.py ui
 .\.venv\Scripts\python.exe src\main.py scan extract match cv notion
 .\.venv\Scripts\python.exe src\main.py search-foreign
@@ -75,13 +104,13 @@ Each person who clones must create **their own** credentials and profile.
 
 ## Sharing with someone else (e.g. family)
 
-1. They clone this repo on **their** PC  
-2. Run `scripts/setup_fresh.ps1`  
+1. They clone this repo on **their** machine  
+2. Run `bash scripts/setup_fresh.sh` (Linux) or `scripts/setup_fresh.ps1` (Windows)  
 3. Use **their** Telegram + Cursor key + Notion  
 4. Fill profile for **their** field (dev, medical, etc.)  
 5. Do **not** send them your `.env` or real profile files  
 
-Details: [SETUP.md](SETUP.md)
+Details: [SETUP.md](SETUP.md) · [ENV.md](ENV.md)
 
 ---
 
