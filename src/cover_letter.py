@@ -66,7 +66,7 @@ def _render_pdf(data: dict, out_path: Path) -> None:
         bottomMargin=18 * mm,
     )
     el = []
-    name = data.get("candidate_name") or "Natnael Eskinder Mengistu"
+    name = data.get("candidate_name") or "Candidate"
     el.append(Paragraph(name, S["header"]))
     contact = data.get("contact_line") or ""
     if contact:

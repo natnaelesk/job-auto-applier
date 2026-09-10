@@ -1,7 +1,8 @@
 # About Me - Agent Profile (TEMPLATE)
 
-> Copy this file to `about_me.md` and fill in YOUR facts.
-> The matcher, CV tailor, and apply helpers read that file.
+> Copy this file to `about_me.md` and fill in YOUR facts locally.
+> Never commit `about_me.md` — it is gitignored. See SETUP.md / ENV notes.
+> CV quality = your local profile + `prompts/cv_writing_skill.md`.
 
 ## Identity
 
@@ -17,7 +18,7 @@
 
 - **Favorite roles:** Backend Developer, Full-Stack Developer
 - **Also strong fits:** Software Engineer, …
-- **Seniority:** Junior to Mid-level (~1 year professional — be honest)
+- **Seniority / Years:** state your real professional years honestly (the agent reads this — do not leave blank)
 - **Work type:** Remote / hybrid / on-site (your preference order)
 - **Willing to relocate:** Yes/No + conditions
 - **Available to start:** e.g. within 2 weeks
@@ -48,9 +49,11 @@
 
 - When to apply / skip / flag for review
 - Salary filters (only when a number is stated, if you want)
+- Remote / abroad / visa preferences
+- Role-title lean (backend, fullstack, IT support, etc.)
 
 ## Hard rules (never break)
 
 - Never lie or invent experience, certificates, or degrees.
 - Never claim more years than you have.
-- Never auto-submit LinkedIn Easy Apply without approval.
+- Never auto-submit LinkedIn Easy Apply without approval (if that is your policy).

@@ -1,7 +1,8 @@
 # Master CV (TEMPLATE)
 
-> Copy to `master_cv.md`. The CV generator reads this and builds a PDF per job.
-> Facts only — never invent.
+> Copy to `master_cv.md` locally (gitignored). Never commit your filled CV.
+> The CV generator + `prompts/cv_writing_skill.md` read this and build a PDF per job.
+> Facts only — never invent. See SETUP.md.
 
 ## Contact
 
@@ -24,7 +25,8 @@
 ## Projects
 
 ### Project name
-- What it is + stack + your ownership
+- What it is + ownership + stack + public URL or none
+- CV use hint optional (e.g. lead for backend roles)
 
 ## Skills
 
@@ -33,6 +35,7 @@
 ## Education
 
 - Degree, school, dates, GPA if you share it
+- Certificates only if real (listed here; tailor prompt folds into education detail)
 
 ## Languages
 

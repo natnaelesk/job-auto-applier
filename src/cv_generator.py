@@ -182,6 +182,12 @@ def generate_for_matched(log=None) -> int:
     """Generate a tailored CV PDF for every 'matched' job without one. Returns count."""
     emit = log or print
     master = (config.PROFILE_DIR / "master_cv.md").read_text(encoding="utf-8")
+    about_path = config.PROFILE_DIR / "about_me.md"
+    about_me = (
+        about_path.read_text(encoding="utf-8")
+        if about_path.exists()
+        else "(about_me.md not found — use master CV only; read years from master CV.)"
+    )
     conn = db.connect()
     jobs = [j for j in db.jobs_with_status(conn, "matched") if not j["cv_path"]]
     total = len(jobs)
@@ -199,6 +205,7 @@ def generate_for_matched(log=None) -> int:
         prompt = ai.load_prompt(
             "tailor_cv",
             master_cv=master,
+            about_me=about_me[:5000],
             company=job["company"] or "unknown",
             title=job["title"] or "unknown",
             skills=job["skills"] or "[]",

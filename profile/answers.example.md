@@ -1,6 +1,8 @@
 # Reusable Application Answers (TEMPLATE)
 
-> Copy to `answers.md`. Substance stays yours; the agent adapts tone per company.
+> Copy to `answers.md` locally (gitignored). Never commit filled answers with
+> private identity data. Substance stays yours; the agent adapts tone per company.
+> Form/screenshot prompts also follow `prompts/cv_writing_skill.md` honesty rules.
 
 ## Why do you want to work here? (base template)
 
@@ -29,7 +31,8 @@
 
 ## Years of experience with X?
 
-Answer honestly. List common skills and approx years.
+Answer honestly. List common skills and approx years. Keep consistent with
+`about_me.md` Years / Seniority.
 
 ## Greatest strength
 
@@ -42,6 +45,10 @@ Answer honestly. List common skills and approx years.
 ## Willing to relocate?
 
 …
+
+## EEO / demographic questions (optional)
+
+Prefer-not-to-say patterns you want the agent to use. Do not invent demographics.
 
 ## Education / degree (for forms)
 

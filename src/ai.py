@@ -114,9 +114,26 @@ def ask_json_with_images(prompt: str, image_paths: list[Path | str]):
     return json.loads(text)
 
 
+def load_cv_writing_skill(max_chars: int | None = None) -> str:
+    """Load prompts/cv_writing_skill.md for CV / letter / form honesty guidance."""
+    path = config.PROMPTS_DIR / "cv_writing_skill.md"
+    if not path.exists():
+        return "(cv_writing_skill.md missing — use profile facts only; never invent.)"
+    text = path.read_text(encoding="utf-8")
+    if max_chars is not None and len(text) > max_chars:
+        return text[:max_chars].rstrip() + "\n\n[skill truncated]"
+    return text
+
+
 def load_prompt(name: str, **kwargs) -> str:
-    """Load a prompt template from prompts/ and fill {placeholders}."""
+    """Load a prompt template from prompts/ and fill {placeholders}.
+
+    If the template contains {cv_writing_skill} and the caller did not pass one,
+    inject prompts/cv_writing_skill.md automatically.
+    """
     template = (config.PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
+    if "{cv_writing_skill}" in template and "cv_writing_skill" not in kwargs:
+        kwargs["cv_writing_skill"] = load_cv_writing_skill()
     for key, value in kwargs.items():
         template = template.replace("{" + key + "}", str(value))
     return template
